@@ -16,7 +16,8 @@ LOG_DIR="${SCRIPT_DIR}/build-logs"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BUILD_LOG="${LOG_DIR}/compile-linux-${TIMESTAMP}.log"
 ERROR_LOG="${LOG_DIR}/compile-linux-error-${TIMESTAMP}.log"
-JAVA_FX_VERSION="21.0.2"
+# Must match JRE/JDK major used to run the app (17). JavaFX 21 requires Java 21.
+JAVA_FX_VERSION="17.0.14"
 
 info()  { printf '\033[1;34m[INFO]\033[0m  %s\n' "$*" >&2; }
 ok()    { printf '\033[1;32m[OK]\033[0m    %s\n' "$*" >&2; }
@@ -100,7 +101,7 @@ package_portable() {
   rm -rf "${out}"
   mkdir -p "${out}/lib" "${out}/javafx"
   cp "${jar}" "${out}/lib/2x2-wallet-desktop.jar"
-  cp "${fx_dir}/javafx-"*"-linux.jar" "${out}/javafx/"
+  cp "${fx_dir}/javafx-"*"-${JAVA_FX_VERSION}-linux.jar" "${out}/javafx/"
   cat > "${out}/2x2-Wallet.sh" << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -111,14 +112,15 @@ if ! command -v "${JAVA_BIN}" >/dev/null 2>&1 && ! command -v java >/dev/null 2>
   exit 1
 fi
 [[ -x "${JAVA_BIN}" ]] || JAVA_BIN=java
-FX="$(echo "${DIR}/javafx"/*.jar | tr ' ' ':')"
-exec "${JAVA_BIN}" --module-path "${FX}" --add-modules javafx.controls,javafx.graphics \
-  -jar "${DIR}/lib/2x2-wallet-desktop.jar" "$@"
+# Directory module-path (not a jar list) — JavaFX 17 matches Java 17.
+exec "${JAVA_BIN}" --module-path "${DIR}/javafx" \
+  --add-modules javafx.base,javafx.controls,javafx.graphics \
+  -cp "${DIR}/lib/2x2-wallet-desktop.jar" com.x2x.desktop.MainApp "$@"
 EOF
   chmod +x "${out}/2x2-Wallet.sh"
   cat > "${out}/README.txt" << 'EOF'
 2X2 Wallet — Linux portable build
-Requirements: Java 17+ (OpenJDK recommended)
+Requirements: Java 17+ (OpenJDK recommended). JavaFX 17 is bundled.
 Run: ./2x2-Wallet.sh
 EOF
   (cd "${DIST_DIR}" && zip -qr "2x2-wallet-desktop-linux.zip" "2x2-Wallet-linux")
@@ -137,11 +139,11 @@ package_jpackage() {
   rm -rf "${tmp}" "${DIST_DIR}/2x2-Wallet"
   mkdir -p "${tmp}"
   cp "${jar}" "${tmp}/2x2-wallet-desktop.jar"
-  local fx_args=()
-  for j in "${fx_dir}"/javafx-*-linux.jar; do
-    fx_args+=(--module-path "${j}")
-  done
-  # jpackage --module-path wants a single dir
+  # jpackage --module-path wants a single dir of version-matched jars
+  local fx_pkg="${DIST_DIR}/jpackage-javafx"
+  rm -rf "${fx_pkg}"
+  mkdir -p "${fx_pkg}"
+  cp "${fx_dir}/javafx-"*"-${JAVA_FX_VERSION}-linux.jar" "${fx_pkg}/"
   jpackage \
     --type app-image \
     --name "2x2-Wallet" \
@@ -149,8 +151,8 @@ package_jpackage() {
     --main-jar "2x2-wallet-desktop.jar" \
     --main-class "com.x2x.desktop.MainApp" \
     --dest "${DIST_DIR}" \
-    --java-options "--module-path=$fx_dir" \
-    --java-options "--add-modules=javafx.controls,javafx.graphics" \
+    --java-options "--module-path=$fx_pkg" \
+    --java-options "--add-modules=javafx.base,javafx.controls,javafx.graphics" \
     || warn "jpackage failed — portable zip is still available."
   if [[ -d "${DIST_DIR}/2x2-Wallet" ]]; then
     ok "App image: ${DIST_DIR}/2x2-Wallet"

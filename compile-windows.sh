@@ -19,7 +19,8 @@ PACKAGING_DIR="${SCRIPT_DIR}/packaging/windows"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BUILD_LOG="${LOG_DIR}/compile-windows-${TIMESTAMP}.log"
 ERROR_LOG="${LOG_DIR}/compile-windows-error-${TIMESTAMP}.log"
-JAVA_FX_VERSION="21.0.2"
+# Must match bundled JRE major (17). JavaFX 21 needs Java 21 and causes "A JNI error has occurred".
+JAVA_FX_VERSION="17.0.14"
 APP_VERSION="1.3.0"
 # Eclipse Temurin 17 Windows x64 JRE (portable .zip)
 JRE_URL="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jre_x64_windows_hotspot_17.0.13_11.zip"
@@ -147,11 +148,32 @@ package_windows() {
   rm -rf "${out}"
   mkdir -p "${out}/lib" "${out}/javafx" "${out}/jre"
   cp "${jar}" "${out}/lib/2x2-wallet-desktop.jar"
-  cp "${fx_dir}/javafx-"*"-win.jar" "${out}/javafx/"
+  # Only ship jars that match JAVA_FX_VERSION (avoid mixing cached JavaFX 21 + 17).
+  cp "${fx_dir}/javafx-"*"-${JAVA_FX_VERSION}-win.jar" "${out}/javafx/"
+  ls "${out}/javafx"/javafx-base-*-win.jar >/dev/null 2>&1 \
+    || fail "JavaFX win jars for ${JAVA_FX_VERSION} missing in package"
   cp -a "${jre_dir}/." "${out}/jre/"
   cp "${DIST_DIR}/2x2-Wallet.ico" "${out}/2x2-Wallet.ico"
 
-  # Console launcher (debug / advanced users)
+  local launch_mods="javafx.base,javafx.controls,javafx.graphics"
+  local main_class="com.x2x.desktop.MainApp"
+
+  # Console launcher — shows real Java/JNI errors (use if GUI shortcut fails)
+  cat > "${out}/2x2-Wallet-Console.bat" << EOF
+@echo off
+setlocal
+cd /d "%~dp0"
+echo Bundled Java:
+jre\\bin\\java.exe -version
+echo.
+jre\\bin\\java.exe --module-path "javafx" --add-modules ${launch_mods} -cp "lib\\2x2-wallet-desktop.jar" ${main_class} %*
+echo.
+echo Exit code: %ERRORLEVEL%
+pause
+endlocal
+EOF
+
+  # Simple bat that launches GUI via PowerShell (kept for portable users)
   cat > "${out}/2x2-Wallet.bat" << 'EOF'
 @echo off
 setlocal
@@ -159,36 +181,27 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp02x2-Wallet.ps1" %*
 endlocal
 EOF
 
-  cat > "${out}/2x2-Wallet.ps1" << 'EOF'
-$ErrorActionPreference = "Stop"
-$Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-# Prefer javaw for GUI (no console). Fall back to java if needed.
-$JavaW = Join-Path $Dir "jre\bin\javaw.exe"
-$Java = Join-Path $Dir "jre\bin\java.exe"
-if (Test-Path $JavaW) { $JavaBin = $JavaW } else { $JavaBin = $Java }
-$FxDir = Join-Path $Dir "javafx"
-$Jars = (Get-ChildItem -Path $FxDir -Filter "*.jar" | ForEach-Object { $_.FullName }) -join ";"
-$AppJar = Join-Path $Dir "lib\2x2-wallet-desktop.jar"
-& $JavaBin --module-path $Jars --add-modules javafx.controls,javafx.graphics -jar $AppJar @args
+  cat > "${out}/2x2-Wallet.ps1" << EOF
+\$ErrorActionPreference = "Stop"
+\$Dir = Split-Path -Parent \$MyInvocation.MyCommand.Path
+\$JavaW = Join-Path \$Dir "jre\\bin\\javaw.exe"
+\$Java = Join-Path \$Dir "jre\\bin\\java.exe"
+if (Test-Path \$JavaW) { \$JavaBin = \$JavaW } else { \$JavaBin = \$Java }
+\$FxDir = Join-Path \$Dir "javafx"
+\$AppJar = Join-Path \$Dir "lib\\2x2-wallet-desktop.jar"
+& \$JavaBin --module-path \$FxDir --add-modules ${launch_mods} -cp \$AppJar ${main_class} @args
 EOF
 
   # GUI launcher used by Start Menu / Desktop shortcuts (no console window)
-  cat > "${out}/2x2-Wallet.vbs" << 'EOF'
+  cat > "${out}/2x2-Wallet.vbs" << EOF
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 dir = fso.GetParentFolderName(WScript.ScriptFullName)
-fx = dir & "\javafx"
-jars = ""
-For Each f In fso.GetFolder(fx).Files
-  If LCase(fso.GetExtensionName(f.Name)) = "jar" Then
-    If jars <> "" Then jars = jars & ";"
-    jars = jars & f.Path
-  End If
-Next
-javaw = dir & "\jre\bin\javaw.exe"
-If Not fso.FileExists(javaw) Then javaw = dir & "\jre\bin\java.exe"
-appJar = dir & "\lib\2x2-wallet-desktop.jar"
-cmd = """" & javaw & """ --module-path """ & jars & """ --add-modules javafx.controls,javafx.graphics -jar """ & appJar & """"
+javaw = dir & "\\jre\\bin\\javaw.exe"
+If Not fso.FileExists(javaw) Then javaw = dir & "\\jre\\bin\\java.exe"
+fx = dir & "\\javafx"
+appJar = dir & "\\lib\\2x2-wallet-desktop.jar"
+cmd = """" & javaw & """ --module-path """ & fx & """ --add-modules ${launch_mods} -cp """ & appJar & """ ${main_class}"
 sh.Run cmd, 0, False
 EOF
 
@@ -196,7 +209,8 @@ EOF
 2X2 Wallet — Windows build
 - Installer users: run 2x2-Wallet-Setup.exe
 - Portable users: double-click 2x2-Wallet.vbs (or 2x2-Wallet.bat)
-A private Windows JRE is bundled — no system Java install is required.
+- If launch fails with a JNI/Java dialog: run 2x2-Wallet-Console.bat and read the stack trace
+Bundled Temurin JRE 17 + JavaFX 17 — no system Java install is required.
 EOF
 
   (cd "${DIST_DIR}" && zip -qr "2x2-wallet-desktop-windows.zip" "2x2-Wallet-windows")

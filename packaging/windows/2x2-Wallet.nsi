@@ -66,6 +66,8 @@ Section "Install"
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
     "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${ICON_FILE}" 0
+  CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME} (debug console).lnk" \
+    "$INSTDIR\2x2-Wallet-Console.bat"
   CreateShortCut "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk" \
     "$INSTDIR\Uninstall.exe"
 
@@ -103,6 +105,7 @@ Section "Uninstall"
   SetRegView 64
   Delete "$DESKTOP\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
+  Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME} (debug console).lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk"
   RMDir "$SMPROGRAMS\${APP_NAME}"
 
