@@ -15,4 +15,19 @@ dependencyResolutionManagement {
 
 rootProject.name = '2x2-wallet'
 include ':x2x-core'
-include ':x2x-android'
+include ':x2x-desktop'
+
+// Android module requires a local SDK (ANDROID_HOME / ANDROID_SDK_ROOT / local.properties).
+def androidHome = System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
+def localPropsFile = new File(rootDir, 'local.properties')
+def hasSdkDir = false
+if (localPropsFile.exists()) {
+    def props = new Properties()
+    localPropsFile.withInputStream { props.load(it) }
+    hasSdkDir = props.getProperty('sdk.dir')?.trim()
+}
+if (androidHome || hasSdkDir) {
+    include ':x2x-android'
+} else {
+    println 'NOTE: Android SDK not found — skipping :x2x-android (desktop/core still build).'
+}

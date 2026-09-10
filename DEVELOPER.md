@@ -11,9 +11,19 @@ Every module depends on this class — do not duplicate constants. The coin name
 ```bash
 cd 2x2-wallet
 ./gradlew :x2x-core:test
+./gradlew :x2x-desktop:run          # desktop UI (JDK 17+)
+# Android (requires SDK):
+./gradlew :x2x-android:assembleRelease
 ```
 
-The Android SDK is not required for `:x2x-core:test`. `:x2x-android` is included only when `ANDROID_HOME` or `local.properties` points at a valid SDK; otherwise `./gradlew :x2x-core:test` still runs.
+From the repository root you can also use:
+
+- `bash compile-android.sh` — APK on Ubuntu 22.04
+- `bash compile-linux.sh` — Linux desktop package on Ubuntu 22.04
+- `bash compile-windows.sh` — Windows portable zip on Ubuntu 22.04
+- `bash compile-macos.sh` — macOS package (must run on macOS)
+
+The Android SDK is not required for `:x2x-core:test` or `:x2x-desktop:*`. `:x2x-android` is included only when `ANDROID_HOME` / `ANDROID_SDK_ROOT` or `local.properties` points at a valid SDK.
 
 Tests cover:
 

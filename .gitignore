@@ -26,6 +26,11 @@ Thumbs.db
 *.dex
 *.class
 
+# Desktop build outputs / caches
+dist/
+.cache/
+build-logs/
+
 # Signing secrets (never commit)
 **/keystore.properties
 **/*.jks

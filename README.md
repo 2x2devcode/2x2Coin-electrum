@@ -1,30 +1,70 @@
-# 2X2 Wallet (Android)
+# 2X2 Wallet
 
-Self-custody Android wallet for **2x2coin (2X2)** — hybrid PoW+PoS.
+Self-custody wallet for **2x2coin (2X2)** — hybrid PoW+PoS.
 
-## App module
+## Modules (`2x2-wallet/`)
 
-The shipping app lives under `2x2-wallet/`:
+| Module | Purpose |
+|---|---|
+| `x2x-core` | Shared pure-JVM wallet core (keys, txs, REST client) |
+| `x2x-android` | Android UI (APK) |
+| `x2x-desktop` | Native desktop UI (JavaFX) for Windows / Linux / macOS |
 
-- `2x2-core` — keys, addresses, transactions, REST client (pure JVM)
-- `2x2-android` — Android UI
+`electrum-2x2/` is a legacy Electrum-LTC fork kept for reference.
 
-`electrum-2x2/` is a legacy Electrum-LTC fork kept for reference. The production Android app is the Java/`2x2-wallet` stack.
+## Build Android APK (Ubuntu 22.04)
+
+```bash
+bash compile-android.sh          # release (default)
+bash compile-android.sh debug
+```
+
+Or manually:
 
 ```bash
 cd 2x2-wallet
 cp keystore.properties.example keystore.properties   # local signing only — never commit
-./gradlew :x2x-core:test
-./gradlew :x2x-android:assembleRelease   # requires Android SDK + keystore
+# Requires ANDROID_HOME or local.properties sdk.dir
+./gradlew :x2x-android:assembleRelease
+```
+
+## Build desktop
+
+### Linux (Ubuntu 22.04)
+
+```bash
+bash compile-linux.sh
+# → dist/linux/2x2-wallet-desktop-linux.zip
+```
+
+### Windows package (cross-built on Ubuntu 22.04)
+
+```bash
+bash compile-windows.sh
+# → dist/windows/2x2-wallet-desktop-windows.zip  (bundled portable JRE + .bat/.ps1)
+```
+
+### macOS (run on a Mac)
+
+```bash
+bash compile-macos.sh
+# → dist/macos/2x2-wallet-desktop-macos.zip  (+ .app when jpackage is available)
+```
+
+### Dev run (any OS with JDK 17+)
+
+```bash
+cd 2x2-wallet
+./gradlew :x2x-desktop:run
 ```
 
 ## Security notes
 
-- Never commit `keystore.properties`, `*.jks`, or release APKs.
-- If a signing key was ever pushed to a public remote, **rotate the keystore** and publish an update signed with the new key.
-- TLS SPKI pinning is enabled for the official API hosts — see `DEVELOPER.md`.
-- Sensitive actions (send, backup, delete) require PIN and/or biometrics.
+- Never commit `keystore.properties`, `*.jks`, or release binaries.
+- If a signing key was ever published, **rotate the keystore**.
+- TLS SPKI pinning is enabled for official API hosts — see `DEVELOPER.md`.
+- Desktop wallet data is stored encrypted under `~/.2x2-wallet/`.
 
 ## Version
 
-Current app version: **1.3.0** (`versionCode` 4).
+App version: **1.3.0** (`versionCode` 4).
