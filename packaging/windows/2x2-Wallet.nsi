@@ -18,7 +18,7 @@
 !define APP_NAME "2X2 Wallet"
 !define APP_PUBLISHER "2x2coin"
 !define APP_URL "https://2x2coin.com"
-!define APP_EXE "2x2-Wallet.exe"
+!define APP_EXE "2x2-Wallet.cmd"
 !define REG_ROOT "Software\${APP_NAME}"
 
 Unicode true
@@ -66,8 +66,8 @@ Section "Install"
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
     "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${ICON_FILE}" 0
-  CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME} (debug console).lnk" \
-    "$INSTDIR\2x2-Wallet-Console.bat"
+  CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME} (debug).lnk" \
+    "$INSTDIR\2x2-Wallet-Debug.cmd"
   CreateShortCut "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk" \
     "$INSTDIR\Uninstall.exe"
 
@@ -105,7 +105,7 @@ Section "Uninstall"
   SetRegView 64
   Delete "$DESKTOP\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
-  Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME} (debug console).lnk"
+  Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME} (debug).lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk"
   RMDir "$SMPROGRAMS\${APP_NAME}"
 

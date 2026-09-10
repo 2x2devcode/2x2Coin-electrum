@@ -37,7 +37,7 @@ tasks.register('desktopJar', Jar) {
         attributes(
                 'Main-Class': 'com.x2x.desktop.MainApp',
                 'Implementation-Title': '2X2 Wallet Desktop',
-                'Implementation-Version': '1.3.0'
+                'Implementation-Version': '1.3.1'
         )
     }
     from sourceSets.main.output

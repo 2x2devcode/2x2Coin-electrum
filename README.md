@@ -41,16 +41,17 @@ bash compile-linux.sh
 
 ```bash
 bash compile-windows.sh
-# → dist/windows/2x2-Wallet-windows/2x2-Wallet.exe   (portable — no install)
+# → dist/windows/2x2-Wallet-windows/2x2-Wallet.cmd   (preferred — no custom PE)
+# → dist/windows/2x2-Wallet-windows/2x2-Wallet.exe   (NSIS stub launcher)
 # → dist/windows/2x2-wallet-desktop-windows.zip
-# → dist/windows/2x2-Wallet-Setup.exe                (optional NSIS installer)
+# → dist/windows/2x2-Wallet-Setup.exe                (optional installer)
 ```
 
-**Portable (recommended):** unzip `2x2-wallet-desktop-windows.zip` anywhere and double-click
-`2x2-Wallet.exe`. Bundled JRE 17 + JavaFX 17 — no system Java and no installer.
+**Portable (no install):** unzip and run **`2x2-Wallet.cmd`**. Bundles **Liberica JRE 17 Full** (JavaFX included) — no system Java.
 
-The optional Setup.exe installs under Program Files, creates Start Menu + Desktop shortcuts,
-and registers an uninstaller in Windows Settings.
+If Windows shows *“A JNI error has occurred”*, run **`2x2-Wallet-Debug.cmd`** and open **`2x2-Wallet-error.log`**.
+
+Kaspersky often quarantines unsigned `.exe` stubs — add the wallet folder to exclusions, or use `.cmd` only.
 
 ### macOS (run on a Mac)
 
