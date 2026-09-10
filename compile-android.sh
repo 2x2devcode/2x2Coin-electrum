@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # compile-android.sh — Build the 2x2coin Android wallet APK on Ubuntu 22.04
 #
-# Target: x2x-wallet (minSdk 24, targetSdk/compileSdk 34 → Android 13 / API 33+)
+# Target: 2x2-wallet (minSdk 24, targetSdk/compileSdk 34 → Android 13 / API 33+)
 # Usage:  bash compile-android.sh
 #         bash compile-android.sh debug|release
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WALLET_DIR="${SCRIPT_DIR}/x2x-wallet"
+WALLET_DIR="${SCRIPT_DIR}/2x2-wallet"
 LOG_DIR="${SCRIPT_DIR}/build-logs"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 ERROR_LOG="${LOG_DIR}/compile-android-error-${TIMESTAMP}.log"

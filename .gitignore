@@ -1,4 +1,4 @@
-﻿# Python / Electrum local
+# Python / Electrum local
 electrum-2x2/.venv/
 electrum-2x2/.git.bak/
 **/__pycache__/
@@ -13,14 +13,14 @@ Thumbs.db
 *.swp
 
 # Android / Gradle
-x2x-wallet/.gradle/
-x2x-wallet/**/build/
-x2x-wallet/local.properties
-x2x-wallet/keystore.properties
-x2x-wallet/*.jks
-x2x-wallet/*.keystore
-x2x-wallet/deliverables/*.apk
-x2x-wallet/deliverables/*.aab
+2x2-wallet/.gradle/
+2x2-wallet/**/build/
+2x2-wallet/local.properties
+2x2-wallet/keystore.properties
+2x2-wallet/*.jks
+2x2-wallet/*.keystore
+2x2-wallet/deliverables/*.apk
+2x2-wallet/deliverables/*.aab
 *.apk
 *.aab
 *.dex

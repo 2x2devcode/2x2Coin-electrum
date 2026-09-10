@@ -4,15 +4,15 @@ Self-custody Android wallet for **2x2coin (2X2)** — hybrid PoW+PoS.
 
 ## App module
 
-The shipping app lives under `x2x-wallet/`:
+The shipping app lives under `2x2-wallet/`:
 
 - `x2x-core` — keys, addresses, transactions, REST client (pure JVM)
 - `x2x-android` — Android UI
 
-`electrum-2x2/` is a legacy Electrum-LTC fork kept for reference. The production Android app is the Java/`x2x-wallet` stack.
+`electrum-2x2/` is a legacy Electrum-LTC fork kept for reference. The production Android app is the Java/`2x2-wallet` stack.
 
 ```bash
-cd x2x-wallet
+cd 2x2-wallet
 cp keystore.properties.example keystore.properties   # local signing only — never commit
 ./gradlew :x2x-core:test
 ./gradlew :x2x-android:assembleRelease   # requires Android SDK + keystore

@@ -2,14 +2,14 @@
 
 ## Coin parameters
 
-Edit `x2x-wallet/x2x-core/src/main/java/com/x2x/core/NetworkParameters.java`.
+Edit `2x2-wallet/x2x-core/src/main/java/com/x2x/core/NetworkParameters.java`.
 
 Every module depends on this class — do not duplicate constants. The coin name is **2x2**.
 
 ## Tests
 
 ```bash
-cd x2x-wallet
+cd 2x2-wallet
 ./gradlew :x2x-core:test
 ```
 
@@ -79,11 +79,11 @@ Explorer fallback list: `NetworkParameters.EXPLORER_BASE_URLS`
 
 ## Balance indexer (server)
 
-The API does not use daemon `getreceivedbyaddress` / `listunspent` (those RPCs only see the node wallet). The server keeps an on-chain indexer in `~/.x2x-wallet-index` (or `INDEX_DIR`).
+The API does not use daemon `getreceivedbyaddress` / `listunspent` (those RPCs only see the node wallet). The server keeps an on-chain indexer in `~/.2x2-wallet-index` (or `INDEX_DIR`).
 
 | Variable | Default | Description |
 |---|---|---|
-| `INDEX_DIR` | `~/.x2x-wallet-index` | Persisted index directory |
+| `INDEX_DIR` | `~/.2x2-wallet-index` | Persisted index directory |
 | `INDEX_START_HEIGHT` | `0` | First block of the full sync |
 | `INDEX_FAST_LOOKBACK_WINDOWS` | `30,60,120` | Fast lookback windows |
 | `INDEX_FAST_BUDGET_MS` | `6000` | Fast query time budget |

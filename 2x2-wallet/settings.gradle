@@ -13,6 +13,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'x2x-wallet'
+rootProject.name = '2x2-wallet'
 include ':x2x-core'
 include ':x2x-android'
