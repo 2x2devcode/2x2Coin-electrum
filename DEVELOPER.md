@@ -25,6 +25,8 @@ From the repository root you can also use:
 
 The Android SDK is not required for `:x2x-core:test` or `:x2x-desktop:*`. `:x2x-android` is included only when `ANDROID_HOME` / `ANDROID_SDK_ROOT` or `local.properties` points at a valid SDK.
 
+Desktop packaging ships **JavaFX 17.0.14** with **JRE/JDK 17**. Do not bump JavaFX to 21+ without also shipping a matching JRE 21 — a mismatch shows Windows dialogs *“A JNI error has occurred”* / *“A Java exception has occurred”*. After changing `JAVA_FX_VERSION`, rebuild with `bash compile-windows.sh` (old jars under `.cache/javafx/` for other versions are ignored). On a failed Windows install, use **Start Menu → 2X2 Wallet (debug console)**.
+
 Tests cover:
 
 - official Base58 vectors

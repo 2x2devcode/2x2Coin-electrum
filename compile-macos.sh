@@ -20,7 +20,8 @@ LOG_DIR="${SCRIPT_DIR}/build-logs"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BUILD_LOG="${LOG_DIR}/compile-macos-${TIMESTAMP}.log"
 ERROR_LOG="${LOG_DIR}/compile-macos-error-${TIMESTAMP}.log"
-JAVA_FX_VERSION="21.0.2"
+# Must match JRE/JDK major used to run the app (17). JavaFX 21 requires Java 21.
+JAVA_FX_VERSION="17.0.14"
 
 info()  { printf '\033[1;34m[INFO]\033[0m  %s\n' "$*" >&2; }
 ok()    { printf '\033[1;32m[OK]\033[0m    %s\n' "$*" >&2; }
@@ -106,7 +107,7 @@ package_portable() {
   rm -rf "${out}"
   mkdir -p "${out}/lib" "${out}/javafx"
   cp "${jar}" "${out}/lib/2x2-wallet-desktop.jar"
-  cp "${fx_dir}/javafx-"*"-${classifier}.jar" "${out}/javafx/"
+  cp "${fx_dir}/javafx-"*"-${JAVA_FX_VERSION}-${classifier}.jar" "${out}/javafx/"
   cat > "${out}/2x2-Wallet.sh" << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -117,14 +118,14 @@ if ! command -v "${JAVA_BIN}" >/dev/null 2>&1 && ! command -v java >/dev/null 2>
   exit 1
 fi
 [[ -x "${JAVA_BIN}" ]] || JAVA_BIN=java
-FX="$(echo "${DIR}/javafx"/*.jar | tr ' ' ':')"
-exec "${JAVA_BIN}" --module-path "${FX}" --add-modules javafx.controls,javafx.graphics \
-  -jar "${DIR}/lib/2x2-wallet-desktop.jar" "$@"
+exec "${JAVA_BIN}" --module-path "${DIR}/javafx" \
+  --add-modules javafx.base,javafx.controls,javafx.graphics \
+  -cp "${DIR}/lib/2x2-wallet-desktop.jar" com.x2x.desktop.MainApp "$@"
 EOF
   chmod +x "${out}/2x2-Wallet.sh"
   cat > "${out}/README.txt" << 'EOF'
 2X2 Wallet — macOS portable build
-Requirements: Java 17+
+Requirements: Java 17+. JavaFX 17 is bundled.
 Run: ./2x2-Wallet.sh
 For a native .app bundle, use the jpackage output in this folder when present.
 EOF
@@ -144,7 +145,10 @@ package_jpackage() {
   rm -rf "${tmp}"
   mkdir -p "${tmp}"
   cp "${jar}" "${tmp}/2x2-wallet-desktop.jar"
-  rm -rf "${DIST_DIR}/2x2-Wallet.app"
+  local fx_pkg="${DIST_DIR}/jpackage-javafx"
+  rm -rf "${fx_pkg}" "${DIST_DIR}/2x2-Wallet.app"
+  mkdir -p "${fx_pkg}"
+  cp "${fx_dir}/javafx-"*"-${JAVA_FX_VERSION}-"*.jar "${fx_pkg}/"
   jpackage \
     --type app-image \
     --name "2x2-Wallet" \
@@ -152,8 +156,8 @@ package_jpackage() {
     --main-jar "2x2-wallet-desktop.jar" \
     --main-class "com.x2x.desktop.MainApp" \
     --dest "${DIST_DIR}" \
-    --java-options "--module-path=$fx_dir" \
-    --java-options "--add-modules=javafx.controls,javafx.graphics" \
+    --java-options "--module-path=$fx_pkg" \
+    --java-options "--add-modules=javafx.base,javafx.controls,javafx.graphics" \
     || warn "jpackage failed — portable zip is still available."
   if [[ -d "${DIST_DIR}/2x2-Wallet.app" ]]; then
     ok "App bundle: ${DIST_DIR}/2x2-Wallet.app"
