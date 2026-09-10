@@ -8,7 +8,7 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
-import android.widget.Button;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -20,6 +20,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.journeyapps.barcodescanner.ScanContract;
 import com.journeyapps.barcodescanner.ScanOptions;
 import com.x2x.core.Address;
@@ -35,10 +36,11 @@ public class MainActivity extends AppCompatActivity {
     private int changeIndex = 0;
     private long feePerKb = NetworkParameters.DEFAULT_FEE_PER_KB;
 
-    private TextView tvStatus, tvBalance, tvAddress, tvFee, tvWebsite, tvActivity;
+    private TextView tvStatus, tvBalance, tvAddress, tvFee, tvWebsite, tvActivity, tvSync;
     private ImageView imgQr;
     private EditText etTo, etAmount;
     private SwipeRefreshLayout swipeRefresh;
+    private View panelHome, panelReceive, panelSend, panelSettings;
 
     private final ActivityResultLauncher<ScanOptions> qrLauncher =
             registerForActivityResult(new ScanContract(), result -> {
@@ -47,6 +49,8 @@ public class MainActivity extends AppCompatActivity {
                 String addr = extractAddress(raw);
                 if (Address.isValid(addr)) {
                     etTo.setText(addr);
+                    showPanel(panelSend);
+                    ((BottomNavigationView) findViewById(R.id.bottom_nav)).setSelectedItemId(R.id.nav_send);
                 } else {
                     Toast.makeText(this, "QR did not contain a valid 2X2 address",
                             Toast.LENGTH_LONG).show();
@@ -70,13 +74,18 @@ public class MainActivity extends AppCompatActivity {
         }
 
         setContentView(R.layout.activity_main);
-        wallet = Wallet.fromMnemonic(mnemonic, "", new ApiClient());
+        wallet = Wallet.fromMnemonic(mnemonic, storage.getPassphrase(), new ApiClient());
         receiveIndex = storage.getReceiveIndex();
         changeIndex = storage.getChangeIndex();
 
         swipeRefresh = findViewById(R.id.swipe_refresh);
+        panelHome = findViewById(R.id.panel_home);
+        panelReceive = findViewById(R.id.panel_receive);
+        panelSend = findViewById(R.id.panel_send);
+        panelSettings = findViewById(R.id.panel_settings);
         tvStatus = findViewById(R.id.tv_status);
         tvBalance = findViewById(R.id.tv_balance);
+        tvSync = findViewById(R.id.tv_sync);
         tvAddress = findViewById(R.id.tv_address);
         tvFee = findViewById(R.id.tv_fee);
         tvWebsite = findViewById(R.id.tv_website);
@@ -84,6 +93,17 @@ public class MainActivity extends AppCompatActivity {
         imgQr = findViewById(R.id.img_qr);
         etTo = findViewById(R.id.et_to);
         etAmount = findViewById(R.id.et_amount);
+
+        BottomNavigationView nav = findViewById(R.id.bottom_nav);
+        nav.setOnItemSelectedListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.nav_home) showPanel(panelHome);
+            else if (id == R.id.nav_receive) showPanel(panelReceive);
+            else if (id == R.id.nav_send) showPanel(panelSend);
+            else if (id == R.id.nav_settings) showPanel(panelSettings);
+            return true;
+        });
+        nav.setSelectedItemId(R.id.nav_home);
 
         swipeRefresh.setOnRefreshListener(this::refresh);
         findViewById(R.id.btn_copy).setOnClickListener(v -> copyAddress());
@@ -99,6 +119,15 @@ public class MainActivity extends AppCompatActivity {
         tvWebsite.setOnClickListener(v -> openWebsite());
 
         showAddress();
+    }
+
+    private void showPanel(View panel) {
+        panelHome.setVisibility(panel == panelHome ? View.VISIBLE : View.GONE);
+        panelReceive.setVisibility(panel == panelReceive ? View.VISIBLE : View.GONE);
+        panelSend.setVisibility(panel == panelSend ? View.VISIBLE : View.GONE);
+        panelSettings.setVisibility(panel == panelSettings ? View.VISIBLE : View.GONE);
+        // Pull-to-refresh is most useful on Home.
+        swipeRefresh.setEnabled(panel == panelHome);
     }
 
     @Override
@@ -137,15 +166,26 @@ public class MainActivity extends AppCompatActivity {
             maybeStopRefresh();
         });
 
-        Bg.run(this, () -> wallet.getBalanceSat(),
-                bal -> {
-                    tvBalance.setText(Amounts.satToCoins(bal));
-                    maybeStopRefresh();
-                },
-                e -> {
-                    Toast.makeText(this, "Could not refresh balance", Toast.LENGTH_SHORT).show();
-                    maybeStopRefresh();
-                });
+        Bg.run(this, () -> {
+            // Probe receive address 0 for indexer scanning flag + aggregate balance.
+            ApiClient.Balance b0 = wallet.api().getBalance(wallet.receiveAddress(0));
+            long bal = wallet.getBalanceSat();
+            return new Object[] { bal, b0.scanning };
+        }, pack -> {
+            long bal = (Long) pack[0];
+            boolean scanning = (Boolean) pack[1];
+            tvBalance.setText(Amounts.satToCoins(bal));
+            if (scanning) {
+                tvSync.setVisibility(View.VISIBLE);
+                tvSync.setText(R.string.indexer_scanning);
+            } else {
+                tvSync.setVisibility(View.GONE);
+            }
+            maybeStopRefresh();
+        }, e -> {
+            Toast.makeText(this, "Could not refresh balance", Toast.LENGTH_SHORT).show();
+            maybeStopRefresh();
+        });
 
         loadActivity();
     }

@@ -9,9 +9,11 @@ The shipping app lives under `x2x-wallet/`:
 - `x2x-core` — keys, addresses, transactions, REST client (pure JVM)
 - `x2x-android` — Android UI
 
+`electrum-2x2/` is a legacy Electrum-LTC fork kept for reference. The production Android app is the Java/`x2x-wallet` stack.
+
 ```bash
 cd x2x-wallet
-cp keystore.properties.example keystore.properties   # local signing only
+cp keystore.properties.example keystore.properties   # local signing only — never commit
 ./gradlew :x2x-core:test
 ./gradlew :x2x-android:assembleRelease   # requires Android SDK + keystore
 ```
@@ -21,7 +23,8 @@ cp keystore.properties.example keystore.properties   # local signing only
 - Never commit `keystore.properties`, `*.jks`, or release APKs.
 - If a signing key was ever pushed to a public remote, **rotate the keystore** and publish an update signed with the new key.
 - TLS SPKI pinning is enabled for the official API hosts — see `DEVELOPER.md`.
+- Sensitive actions (send, backup, delete) require PIN and/or biometrics.
 
 ## Version
 
-Current app version: **1.2.0** (`versionCode` 3).
+Current app version: **1.3.0** (`versionCode` 4).

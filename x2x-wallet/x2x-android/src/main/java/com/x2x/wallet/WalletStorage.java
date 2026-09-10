@@ -14,6 +14,7 @@ import java.security.SecureRandom;
 public final class WalletStorage {
     private static final String FILE = "x2x_secure_prefs";
     private static final String KEY_MNEMONIC = "mnemonic";
+    private static final String KEY_PASSPHRASE = "bip39_passphrase";
     private static final String KEY_PIN_HASH = "pin_hash";
     private static final String KEY_PIN_SALT = "pin_salt";
     private static final String KEY_RECEIVE_INDEX = "receive_index";
@@ -43,6 +44,16 @@ public final class WalletStorage {
     }
 
     public String getMnemonic() { return prefs.getString(KEY_MNEMONIC, null); }
+
+    /** Optional BIP39 passphrase (empty string when unused). */
+    public void savePassphrase(String passphrase) {
+        prefs.edit().putString(KEY_PASSPHRASE, passphrase == null ? "" : passphrase).apply();
+    }
+
+    public String getPassphrase() {
+        String p = prefs.getString(KEY_PASSPHRASE, "");
+        return p == null ? "" : p;
+    }
 
     public boolean hasPin() { return prefs.contains(KEY_PIN_HASH) && prefs.contains(KEY_PIN_SALT); }
 

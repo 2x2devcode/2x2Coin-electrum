@@ -26,7 +26,7 @@ public class OnboardingActivity extends AppCompatActivity {
     private WalletStorage storage;
     private LinearLayout panelStart, panelShowSeed, panelConfirmSeed, panelImport;
     private TextView tvSeedWords, tvConfirmPrompt;
-    private EditText etImport, etConfirmWord;
+    private EditText etImport, etConfirmWord, etImportPassphrase;
     private String pendingMnemonic;
     private String[] pendingWords;
     private final List<Integer> confirmIndexes = new ArrayList<>();
@@ -55,6 +55,7 @@ public class OnboardingActivity extends AppCompatActivity {
         tvSeedWords = findViewById(R.id.tv_seed_words);
         tvConfirmPrompt = findViewById(R.id.tv_confirm_prompt);
         etImport = findViewById(R.id.et_import_seed);
+        etImportPassphrase = findViewById(R.id.et_import_passphrase);
         etConfirmWord = findViewById(R.id.et_confirm_word);
 
         findViewById(R.id.btn_create).setOnClickListener(v -> startCreate());
@@ -123,11 +124,17 @@ public class OnboardingActivity extends AppCompatActivity {
             Toast.makeText(this, "Invalid seed phrase", Toast.LENGTH_LONG).show();
             return;
         }
-        finishCreate(mnemonic, true);
+        String passphrase = etImportPassphrase.getText().toString();
+        finishCreate(mnemonic, passphrase, true);
     }
 
     private void finishCreate(String mnemonic, boolean confirmed) {
+        finishCreate(mnemonic, "", confirmed);
+    }
+
+    private void finishCreate(String mnemonic, String passphrase, boolean confirmed) {
         storage.saveMnemonic(mnemonic);
+        storage.savePassphrase(passphrase);
         storage.setSeedConfirmed(confirmed);
         storage.setReceiveIndex(0);
         storage.setChangeIndex(0);

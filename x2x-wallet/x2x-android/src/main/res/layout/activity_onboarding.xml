@@ -197,6 +197,16 @@
                 android:textColor="@color/x2x_on_surface"
                 android:textColorHint="@color/x2x_muted" />
 
+            <EditText
+                android:id="@+id/et_import_passphrase"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/passphrase_optional_hint"
+                android:inputType="textPassword"
+                android:textColor="@color/x2x_on_surface"
+                android:textColorHint="@color/x2x_muted" />
+
             <Button
                 android:id="@+id/btn_import_go"
                 android:layout_width="match_parent"

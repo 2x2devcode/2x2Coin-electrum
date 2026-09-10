@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Email the maintainers of the `2x2devcode/2x2Coin_android` repository. Do not open public issues for undisclosed wallet or key-handling flaws.
+Email the maintainers of this repository. Do not open public issues for undisclosed wallet or key-handling flaws.
 
 ## Signing keys
 
