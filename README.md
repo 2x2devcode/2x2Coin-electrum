@@ -41,8 +41,12 @@ bash compile-linux.sh
 
 ```bash
 bash compile-windows.sh
-# → dist/windows/2x2-wallet-desktop-windows.zip  (bundled portable JRE + .bat/.ps1)
+# → dist/windows/2x2-Wallet-Setup.exe              (NSIS installer)
+# → dist/windows/2x2-wallet-desktop-windows.zip    (portable folder)
 ```
+
+The Setup.exe installs under Program Files, creates Start Menu + Desktop shortcuts,
+and registers an uninstaller in Windows Settings.
 
 ### macOS (run on a Mac)
 
