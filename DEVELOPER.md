@@ -20,7 +20,9 @@ From the repository root you can also use:
 
 - `bash compile-android.sh` — APK on Ubuntu 22.04
 - `bash compile-linux.sh` — Linux desktop package on Ubuntu 22.04
-- `bash compile-windows.sh` — Windows portable zip **and** `2x2-Wallet-Setup.exe` (NSIS) on Ubuntu 22.04
+- `bash compile-windows.sh` — Windows **portable** `2x2-Wallet.exe` (+ zip) and optional `2x2-Wallet-Setup.exe` on Ubuntu 22.04
+  - Portable: unzip and run `2x2-Wallet.exe` (no install, no system Java)
+  - Requires `mingw-w64` to cross-compile the `.exe` launcher
 - `bash compile-macos.sh` — macOS package (must run on macOS)
 
 The Android SDK is not required for `:x2x-core:test` or `:x2x-desktop:*`. `:x2x-android` is included only when `ANDROID_HOME` / `ANDROID_SDK_ROOT` or `local.properties` points at a valid SDK.

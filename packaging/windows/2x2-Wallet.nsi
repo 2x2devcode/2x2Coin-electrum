@@ -18,7 +18,7 @@
 !define APP_NAME "2X2 Wallet"
 !define APP_PUBLISHER "2x2coin"
 !define APP_URL "https://2x2coin.com"
-!define APP_EXE "2x2-Wallet.vbs"
+!define APP_EXE "2x2-Wallet.exe"
 !define REG_ROOT "Software\${APP_NAME}"
 
 Unicode true
