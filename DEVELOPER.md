@@ -20,14 +20,13 @@ From the repository root you can also use:
 
 - `bash compile-android.sh` — APK on Ubuntu 22.04
 - `bash compile-linux.sh` — Linux desktop package on Ubuntu 22.04
-- `bash compile-windows.sh` — Windows **portable** `2x2-Wallet.exe` (+ zip) and optional `2x2-Wallet-Setup.exe` on Ubuntu 22.04
-  - Portable: unzip and run `2x2-Wallet.exe` (no install, no system Java)
-  - Requires `mingw-w64` to cross-compile the `.exe` launcher
+- `bash compile-windows.sh` — Windows **portable** package (+ optional Setup.exe) on Ubuntu 22.04
+  - Runtime: **BellSoft Liberica JRE 17 Full** (JavaFX built-in — avoids JNI dialogs from mismatched OpenJFX jars)
+  - Prefer `2x2-Wallet.cmd`; `2x2-Wallet.exe` is an NSIS stub (custom mingw launchers are often deleted by Kaspersky)
+  - On failure run `2x2-Wallet-Debug.cmd` → `2x2-Wallet-error.log`
 - `bash compile-macos.sh` — macOS package (must run on macOS)
 
 The Android SDK is not required for `:x2x-core:test` or `:x2x-desktop:*`. `:x2x-android` is included only when `ANDROID_HOME` / `ANDROID_SDK_ROOT` or `local.properties` points at a valid SDK.
-
-Desktop packaging ships **JavaFX 17.0.14** with **JRE/JDK 17**. Do not bump JavaFX to 21+ without also shipping a matching JRE 21 — a mismatch shows Windows dialogs *“A JNI error has occurred”* / *“A Java exception has occurred”*. After changing `JAVA_FX_VERSION`, rebuild with `bash compile-windows.sh` (old jars under `.cache/javafx/` for other versions are ignored). On a failed Windows install, use **Start Menu → 2X2 Wallet (debug console)**.
 
 Tests cover:
 
