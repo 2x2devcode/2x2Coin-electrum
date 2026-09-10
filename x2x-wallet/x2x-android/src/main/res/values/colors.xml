@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="x2x_green">#39FF14</color>
+    <color name="x2x_green_dark">#1FA971</color>
+    <color name="x2x_cyan">#00D4FF</color>
+    <color name="x2x_bg">#070B14</color>
+    <color name="x2x_surface">#10182A</color>
+    <color name="x2x_on_surface">#E8EEF8</color>
+    <color name="x2x_muted">#8A9BB3</color>
+    <color name="ic_launcher_background">#06101F</color>
+    <color name="white">#FFFFFF</color>
+    <color name="red">#E5484D</color>
+</resources>

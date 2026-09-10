@@ -1,0 +1,35 @@
+﻿# Python / Electrum local
+electrum-2x2/.venv/
+electrum-2x2/.git.bak/
+**/__pycache__/
+*.pyc
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# Android / Gradle
+x2x-wallet/.gradle/
+x2x-wallet/**/build/
+x2x-wallet/local.properties
+x2x-wallet/keystore.properties
+x2x-wallet/*.jks
+x2x-wallet/*.keystore
+x2x-wallet/deliverables/*.apk
+x2x-wallet/deliverables/*.aab
+*.apk
+*.aab
+*.dex
+*.class
+
+# Signing secrets (never commit)
+**/keystore.properties
+**/*.jks
+**/*.keystore
+secrets/
+.env
+.env.*

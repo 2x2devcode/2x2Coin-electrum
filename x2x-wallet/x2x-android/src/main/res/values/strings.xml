@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">2X2 Wallet</string>
+    <string name="onboarding_subtitle">Secure self-custody wallet for 2x2coin (PoW+PoS hybrid)</string>
+    <string name="create_wallet">Create new wallet</string>
+    <string name="import_wallet">Import from seed phrase</string>
+    <string name="seed_backup_title">Write down your recovery phrase</string>
+    <string name="seed_backup_body">These 12 words are the only way to restore your funds. Store them offline. Never share them.</string>
+    <string name="seed_written_down">I wrote it down</string>
+    <string name="seed_confirm_title">Confirm your backup</string>
+    <string name="seed_word_hint">word</string>
+    <string name="seed_phrase_hint">word1 word2 word3 …</string>
+    <string name="import_seed_body">Enter your 12–24 word BIP39 recovery phrase.</string>
+    <string name="back">Back</string>
+    <string name="next">Next</string>
+    <string name="connecting">connecting…</string>
+    <string name="balance_label">BALANCE</string>
+    <string name="receive">Receive</string>
+    <string name="receive_qr">Receive address QR</string>
+    <string name="copy">Copy</string>
+    <string name="new_address">New address</string>
+    <string name="send">Send</string>
+    <string name="recipient_hint">Recipient 2X2 address</string>
+    <string name="scan_qr">Scan</string>
+    <string name="amount_hint">Amount (2X2)</string>
+    <string name="network_fee_applies">Network fee applies</string>
+    <string name="send_2x2">Send 2X2</string>
+    <string name="activity">Activity</string>
+    <string name="loading">Loading…</string>
+    <string name="backup_seed">Backup seed</string>
+    <string name="delete_wallet">Delete wallet</string>
+    <string name="address_copied">Address copied. Clear the clipboard when done.</string>
+</resources>

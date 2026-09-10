@@ -1,0 +1,27 @@
+// x2x-core: pure-JVM wallet core (keys, addresses, transactions, REST client).
+// Builds and tests WITHOUT the Android SDK:  ./gradlew :x2x-core:test
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+dependencies {
+    // Bouncy Castle lightweight crypto API (used directly, NOT registered as a JCE
+    // provider) so there is no clash with Android's bundled provider.
+    api 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+    // Small, Android-safe JSON (no org.json conflict).
+    api 'com.google.code.gson:gson:2.11.0'
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+test {
+    useJUnit()
+    testLogging { events "passed", "failed", "skipped" }
+    // Pass -Dlive=true to run the live-network integration test.
+    systemProperty 'live', System.getProperty('live', 'false')
+}

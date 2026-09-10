@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.X2xWallet" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/x2x_green</item>
+        <item name="colorPrimaryContainer">@color/x2x_green_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="android:colorBackground">@color/x2x_bg</item>
+        <item name="colorSurface">@color/x2x_surface</item>
+        <item name="colorOnSurface">@color/x2x_on_surface</item>
+        <item name="android:statusBarColor">@color/x2x_bg</item>
+    </style>
+</resources>
