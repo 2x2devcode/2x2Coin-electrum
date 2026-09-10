@@ -76,4 +76,4 @@ cd 2x2-wallet
 
 ## Version
 
-App version: **1.3.0** (`versionCode` 4).
+App version: **1.3.2** (`versionCode` 4).

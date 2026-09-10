@@ -9,7 +9,7 @@
   !define ICON_FILE "2x2-Wallet.ico"
 !endif
 !ifndef APP_VERSION
-  !define APP_VERSION "1.3.1"
+  !define APP_VERSION "1.3.2"
 !endif
 
 Unicode true
