@@ -41,11 +41,15 @@ bash compile-linux.sh
 
 ```bash
 bash compile-windows.sh
-# → dist/windows/2x2-Wallet-Setup.exe              (NSIS installer)
-# → dist/windows/2x2-wallet-desktop-windows.zip    (portable folder)
+# → dist/windows/2x2-Wallet-windows/2x2-Wallet.exe   (portable — no install)
+# → dist/windows/2x2-wallet-desktop-windows.zip
+# → dist/windows/2x2-Wallet-Setup.exe                (optional NSIS installer)
 ```
 
-The Setup.exe installs under Program Files, creates Start Menu + Desktop shortcuts,
+**Portable (recommended):** unzip `2x2-wallet-desktop-windows.zip` anywhere and double-click
+`2x2-Wallet.exe`. Bundled JRE 17 + JavaFX 17 — no system Java and no installer.
+
+The optional Setup.exe installs under Program Files, creates Start Menu + Desktop shortcuts,
 and registers an uninstaller in Windows Settings.
 
 ### macOS (run on a Mac)

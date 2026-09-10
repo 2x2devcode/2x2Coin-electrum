@@ -1,0 +1,7 @@
+#include <winuser.h>
+
+#ifndef IDI_APPICON
+#define IDI_APPICON 1
+#endif
+
+IDI_APPICON ICON "2x2-Wallet.ico"

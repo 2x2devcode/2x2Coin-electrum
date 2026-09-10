@@ -2,13 +2,14 @@
 # compile-windows.sh — Build Windows desktop package + Setup.exe on Ubuntu 22.04
 #
 # Produces:
-#   dist/windows/2x2-Wallet-windows/           (portable folder)
+#   dist/windows/2x2-Wallet-windows/           (portable folder — run 2x2-Wallet.exe)
 #   dist/windows/2x2-wallet-desktop-windows.zip
-#   dist/windows/2x2-Wallet-Setup.exe          (NSIS installer)
+#   dist/windows/2x2-Wallet-Setup.exe          (optional NSIS installer)
+#
+# Portable use (no install): unzip the zip and double-click 2x2-Wallet.exe.
 #
 # Usage:  bash compile-windows.sh
 #
-set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WALLET_DIR="${SCRIPT_DIR}/2x2-wallet"
@@ -67,11 +68,12 @@ sudo_if_needed() {
 }
 
 ensure_tools() {
-  info "Ensuring build tools (JDK, wget, unzip, zip, nsis)..."
+  info "Ensuring build tools (JDK, wget, unzip, zip, nsis, mingw-w64)..."
   sudo_if_needed apt-get update -y
-  sudo_if_needed apt-get install -y openjdk-17-jdk wget unzip zip nsis python3 python3-pil \
-    || sudo_if_needed apt-get install -y openjdk-17-jdk wget unzip zip nsis python3
+  sudo_if_needed apt-get install -y openjdk-17-jdk wget unzip zip nsis mingw-w64 python3 python3-pil \
+    || sudo_if_needed apt-get install -y openjdk-17-jdk wget unzip zip nsis mingw-w64 python3
   command -v makensis >/dev/null 2>&1 || fail "makensis (NSIS) is required to build Setup.exe"
+  command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1 || fail "mingw-w64 is required to build 2x2-Wallet.exe"
   java -version
   makensis -VERSION || true
 }
@@ -155,10 +157,18 @@ package_windows() {
   cp -a "${jre_dir}/." "${out}/jre/"
   cp "${DIST_DIR}/2x2-Wallet.ico" "${out}/2x2-Wallet.ico"
 
+  info "Building portable 2x2-Wallet.exe (mingw-w64)..."
+  chmod +x "${PACKAGING_DIR}/build-launcher.sh"
+  bash "${PACKAGING_DIR}/build-launcher.sh" \
+    "${DIST_DIR}/2x2-Wallet.ico" \
+    "${out}/2x2-Wallet.exe"
+  [[ -f "${out}/2x2-Wallet.exe" ]] || fail "2x2-Wallet.exe was not produced"
+  ok "Portable exe: ${out}/2x2-Wallet.exe"
+
   local launch_mods="javafx.base,javafx.controls,javafx.graphics"
   local main_class="com.x2x.desktop.MainApp"
 
-  # Console launcher — shows real Java/JNI errors (use if GUI shortcut fails)
+  # Console launcher — shows real Java/JNI errors (use if .exe GUI fails)
   cat > "${out}/2x2-Wallet-Console.bat" << EOF
 @echo off
 setlocal
@@ -173,7 +183,7 @@ pause
 endlocal
 EOF
 
-  # Simple bat that launches GUI via PowerShell (kept for portable users)
+  # Fallback script launchers (optional)
   cat > "${out}/2x2-Wallet.bat" << 'EOF'
 @echo off
 setlocal
@@ -192,29 +202,21 @@ if (Test-Path \$JavaW) { \$JavaBin = \$JavaW } else { \$JavaBin = \$Java }
 & \$JavaBin --module-path \$FxDir --add-modules ${launch_mods} -cp \$AppJar ${main_class} @args
 EOF
 
-  # GUI launcher used by Start Menu / Desktop shortcuts (no console window)
-  cat > "${out}/2x2-Wallet.vbs" << EOF
-Set sh = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
-dir = fso.GetParentFolderName(WScript.ScriptFullName)
-javaw = dir & "\\jre\\bin\\javaw.exe"
-If Not fso.FileExists(javaw) Then javaw = dir & "\\jre\\bin\\java.exe"
-fx = dir & "\\javafx"
-appJar = dir & "\\lib\\2x2-wallet-desktop.jar"
-cmd = """" & javaw & """ --module-path """ & fx & """ --add-modules ${launch_mods} -cp """ & appJar & """ ${main_class}"
-sh.Run cmd, 0, False
-EOF
-
   cat > "${out}/README.txt" << 'EOF'
-2X2 Wallet — Windows build
-- Installer users: run 2x2-Wallet-Setup.exe
-- Portable users: double-click 2x2-Wallet.vbs (or 2x2-Wallet.bat)
-- If launch fails with a JNI/Java dialog: run 2x2-Wallet-Console.bat and read the stack trace
-Bundled Temurin JRE 17 + JavaFX 17 — no system Java install is required.
+2X2 Wallet — Windows portable build (no installation required)
+
+1. Unzip this folder anywhere (USB, Desktop, Documents, …)
+2. Double-click 2x2-Wallet.exe
+
+Bundled Temurin JRE 17 + JavaFX 17 — system Java is NOT required.
+Do not move 2x2-Wallet.exe alone; keep jre\, javafx\, and lib\ beside it.
+
+Troubleshooting: run 2x2-Wallet-Console.bat and read the stack trace.
+Optional installer: 2x2-Wallet-Setup.exe (Start Menu + Desktop shortcuts).
 EOF
 
   (cd "${DIST_DIR}" && zip -qr "2x2-wallet-desktop-windows.zip" "2x2-Wallet-windows")
-  ok "Windows zip: ${DIST_DIR}/2x2-wallet-desktop-windows.zip"
+  ok "Windows portable zip: ${DIST_DIR}/2x2-wallet-desktop-windows.zip"
 }
 
 build_setup_exe() {
@@ -252,10 +254,12 @@ main() {
   make_icon
   package_windows "${JAR}" "${FX_DIR}" "${JRE_DIR}"
   build_setup_exe
-  ok "Windows desktop + Setup.exe build complete."
-  info "Artifacts:"
-  info "  ${DIST_DIR}/2x2-Wallet-Setup.exe"
+  ok "Windows desktop build complete."
+  info "Artifacts (portable — no install):"
+  info "  ${DIST_DIR}/2x2-Wallet-windows/2x2-Wallet.exe"
   info "  ${DIST_DIR}/2x2-wallet-desktop-windows.zip"
+  info "Optional installer:"
+  info "  ${DIST_DIR}/2x2-Wallet-Setup.exe"
 }
 
 main "$@"
