@@ -6,8 +6,8 @@ Self-custody Android wallet for **2x2coin (2X2)** — hybrid PoW+PoS.
 
 The shipping app lives under `2x2-wallet/`:
 
-- `x2x-core` — keys, addresses, transactions, REST client (pure JVM)
-- `x2x-android` — Android UI
+- `2x2-core` — keys, addresses, transactions, REST client (pure JVM)
+- `2x2-android` — Android UI
 
 `electrum-2x2/` is a legacy Electrum-LTC fork kept for reference. The production Android app is the Java/`2x2-wallet` stack.
 
