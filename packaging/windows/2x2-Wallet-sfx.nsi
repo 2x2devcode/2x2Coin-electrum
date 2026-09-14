@@ -18,9 +18,9 @@
 !endif
 
 Unicode true
-; Prefer amd64 stub so Windows does not show "This app can't run on your PC"
-; for broken/quarantined PE32 stubs.
-Target amd64-unicode
+; NSIS Ubuntu packages ship x86 stubs (PE32). That is normal for installers and
+; runs on Windows x64 under WoW64. The embedded JRE is amd64 — x64 Windows required.
+; (Do not set "Target amd64-unicode" unless amd64 stubs are installed.)
 SilentInstall silent
 RequestExecutionLevel user
 Name "2X2 Wallet"

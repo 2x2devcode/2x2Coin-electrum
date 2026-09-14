@@ -228,16 +228,6 @@ build_self_contained_exe() {
     -DICON_FILE="2x2-Wallet.ico"
   )
 
-  # Use amd64 stub when available (avoids broken PE32 stubs / "can't run on this PC").
-  if ls /usr/share/nsis/Stubs/amd64* >/dev/null 2>&1 \
-      || makensis -CMDHELP Target 2>&1 | grep -qi amd64; then
-    info "NSIS amd64 stub available"
-  else
-    warn "NSIS amd64 stub not found — using default stub (still requires Windows x64 for the JRE)."
-    # Strip Target line for older NSIS
-    sed -i '/^Target amd64-unicode/d' "${DIST_DIR}/2x2-Wallet-sfx.nsi"
-  fi
-
   (
     cd "${DIST_DIR}"
     makensis "${nsis_args[@]}" "2x2-Wallet-sfx.nsi"
