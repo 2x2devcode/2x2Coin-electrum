@@ -60,4 +60,17 @@ public class HdWalletTest {
         assertTrue(addr.startsWith("2"));
         assertTrue(Address.isValid(addr));
     }
+
+    @Test
+    public void scanCountCoversHighReceiveIndex() {
+        Wallet w = Wallet.fromMnemonic(
+                "abandon abandon abandon abandon abandon abandon abandon abandon "
+                        + "abandon abandon abandon about",
+                "",
+                new ApiClient());
+        // Previously lookAhead=12 missed funds on receive index >= 12 while UI could show them.
+        assertEquals(41, w.scanCount(20)); // max(20, 20+1+20)
+        assertTrue(w.scanCount(0) >= w.lookAhead);
+        assertTrue(w.scanCount(50) > 50);
+    }
 }

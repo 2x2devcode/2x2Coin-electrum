@@ -69,6 +69,7 @@ public class MainApp extends Application {
 
     private Label statusLabel;
     private Label balanceLabel;
+    private Label depositBalanceLabel;
     private Label syncLabel;
     private Label feeLabel;
     private Label addressLabel;
@@ -302,7 +303,9 @@ public class MainApp extends Application {
         Button refresh = secondaryButton("Refresh");
         refresh.setOnAction(e -> refresh());
 
-        VBox bal = card(new VBox(6, mutedLabel("BALANCE"), balanceLabel, ticker, syncLabel));
+        VBox bal = card(new VBox(6,
+                mutedLabel("WALLET BALANCE (all addresses)"),
+                balanceLabel, ticker, syncLabel));
         bal.setAlignment(Pos.CENTER);
         VBox act = card(new VBox(8, sectionTitle("Activity"), activityLabel));
 
@@ -323,6 +326,7 @@ public class MainApp extends Application {
         qrView.setFitHeight(220);
         qrView.setPreserveRatio(true);
 
+        depositBalanceLabel = mutedLabel("Deposit address balance: …");
         Button copy = primaryButton("Copy");
         Button neu = secondaryButton("New address");
         copy.setOnAction(e -> {
@@ -336,11 +340,12 @@ public class MainApp extends Application {
             storage.setReceiveIndex(storage.getReceiveIndex() + 1);
             persistQuiet();
             showAddress();
+            refresh();
         });
 
         showAddress();
         VBox box = new VBox(16, sectionTitle("Receive"),
-                card(new VBox(12, qrView, addressLabel, row(copy, neu))));
+                card(new VBox(12, qrView, addressLabel, depositBalanceLabel, row(copy, neu))));
         box.setPadding(new Insets(20));
         box.setAlignment(Pos.TOP_CENTER);
         return box;
@@ -408,15 +413,22 @@ public class MainApp extends Application {
     private void refresh() {
         if (wallet == null) return;
         statusLabel.setText("refreshing…");
+        final int recvIdx = storage.getReceiveIndex();
+        final int changeIdx = storage.getChangeIndex();
+        final String depositAddr = wallet.receiveAddress(recvIdx);
         pool.execute(() -> {
             try {
                 ApiClient.Status s = wallet.api().getStatus();
                 feePerKb = wallet.api().getFeePerKb();
-                ApiClient.Balance b0 = wallet.api().getBalance(wallet.receiveAddress(0));
-                long bal = wallet.getBalanceSat();
+                // Probe the address the user is looking at (not only index 0).
+                ApiClient.Balance depositBal = wallet.api().getBalance(depositAddr);
+                ApiClient.Balance b0 = recvIdx == 0 ? depositBal
+                        : wallet.api().getBalance(wallet.receiveAddress(0));
+                boolean scanning = depositBal.scanning || b0.scanning;
+                long bal = wallet.getBalanceSat(recvIdx, changeIdx);
                 StringBuilder act = new StringBuilder();
                 java.util.Set<String> seen = new java.util.HashSet<>();
-                int scan = Math.max(wallet.lookAhead, storage.getReceiveIndex() + 1);
+                int scan = wallet.scanCount(recvIdx);
                 for (int i = 0; i < scan; i++) {
                     for (ApiClient.TxInfo t : wallet.api().getTxs(wallet.receiveAddress(i))) {
                         String id = t.txid == null ? "" : t.txid;
@@ -431,6 +443,8 @@ public class MainApp extends Application {
                     if (seen.size() >= 12) break;
                 }
                 String activity = act.length() == 0 ? "No transactions yet" : act.toString();
+                final boolean scanningFinal = scanning;
+                final long depositSat = depositBal.confirmedSat;
                 Platform.runLater(() -> {
                     if (s.online) {
                         statusLabel.setText("● Mainnet " + s.blocks);
@@ -440,9 +454,13 @@ public class MainApp extends Application {
                         statusLabel.setTextFill(Color.web("#E5484D"));
                     }
                     balanceLabel.setText(Amounts.satToCoins(bal));
+                    if (depositBalanceLabel != null) {
+                        depositBalanceLabel.setText("Deposit address balance: "
+                                + Amounts.satToCoins(depositSat) + " 2X2");
+                    }
                     feeLabel.setText("Fee rate: " + Amounts.satToCoins(feePerKb) + " 2X2 / kB");
-                    syncLabel.setVisible(b0.scanning);
-                    syncLabel.setText(b0.scanning
+                    syncLabel.setVisible(scanningFinal);
+                    syncLabel.setText(scanningFinal
                             ? "Indexer syncing… balance may be incomplete" : "");
                     activityLabel.setText(activity);
                 });
@@ -476,9 +494,10 @@ public class MainApp extends Application {
         }
         final long amountFinal = amountSat;
         final int useChange = storage.getChangeIndex();
+        final int recvIdx = storage.getReceiveIndex();
         pool.execute(() -> {
             try {
-                var built = wallet.createTransaction(to, amountFinal, useChange);
+                var built = wallet.createTransaction(to, amountFinal, useChange, recvIdx, useChange);
                 Platform.runLater(() -> {
                     String msg = "Send " + Amounts.satToCoins(amountFinal) + " 2X2\n"
                             + "To: " + to + "\n"
@@ -494,7 +513,7 @@ public class MainApp extends Application {
                         return;
                     }
                     if (!requirePin("Authorize payment")) return;
-                    doSend(to, amountFinal, useChange);
+                    doSend(to, amountFinal, useChange, recvIdx);
                 });
             } catch (Exception ex) {
                 Platform.runLater(() ->
@@ -503,10 +522,10 @@ public class MainApp extends Application {
         });
     }
 
-    private void doSend(String to, long amountSat, int useChange) {
+    private void doSend(String to, long amountSat, int useChange, int recvIdx) {
         pool.execute(() -> {
             try {
-                String txid = wallet.send(to, amountSat, useChange);
+                String txid = wallet.send(to, amountSat, useChange, recvIdx, useChange);
                 storage.setChangeIndex(useChange + 1);
                 persistQuiet();
                 Platform.runLater(() -> {

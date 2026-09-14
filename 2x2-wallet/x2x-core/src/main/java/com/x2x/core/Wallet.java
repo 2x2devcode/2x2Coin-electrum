@@ -13,8 +13,11 @@ public final class Wallet {
     private final Bip32.Node account;   // m/44'/coin'/0'
     private final ApiClient api;
 
-    /** How many external+change addresses to scan for funds. */
-    public int lookAhead = 12;
+    /**
+     * Extra unused addresses to scan beyond the highest known receive/change index
+     * (BIP44 gap limit style). Minimum scan count is always at least this many.
+     */
+    public int lookAhead = 20;
 
     public Wallet(byte[] seed, ApiClient api) {
         this.account = Bip32.derivePath(Bip32.fromSeed(seed), NetworkParameters.defaultAccountPath());
@@ -50,11 +53,32 @@ public final class Wallet {
     @Deprecated
     public String changeAddress() { return changeAddress(0); }
 
+    /**
+     * How many addresses to scan on a chain given the highest known used index
+     * (inclusive). Always scans at least {@link #lookAhead} addresses.
+     */
+    public int scanCount(int highestKnownIndex) {
+        int known = Math.max(0, highestKnownIndex);
+        return Math.max(lookAhead, known + 1 + lookAhead);
+    }
+
     /** Scan derived addresses and collect all spendable outputs with their keys. */
     public List<TxBuilder.Spendable> collectSpendable() throws IOException {
+        return collectSpendable(lookAhead - 1, lookAhead - 1);
+    }
+
+    /**
+     * @param highestReceiveIndex highest receive index the UI has shown / used (inclusive)
+     * @param highestChangeIndex  highest change index used for spends (inclusive)
+     */
+    public List<TxBuilder.Spendable> collectSpendable(int highestReceiveIndex, int highestChangeIndex)
+            throws IOException {
         List<TxBuilder.Spendable> out = new ArrayList<>();
+        int receiveN = scanCount(highestReceiveIndex);
+        int changeN = scanCount(highestChangeIndex);
         for (int c = 0; c < 2; c++) {
-            for (int i = 0; i < lookAhead; i++) {
+            int n = (c == 0) ? receiveN : changeN;
+            for (int i = 0; i < n; i++) {
                 DerivedKey k = key(c, i);
                 for (ApiClient.Utxo u : api.getUtxos(k.address)) {
                     out.add(new TxBuilder.Spendable(u.txid, u.vout, u.valueSat, u.scriptPubKey,
@@ -66,8 +90,14 @@ public final class Wallet {
     }
 
     public long getBalanceSat() throws IOException {
+        return getBalanceSat(lookAhead - 1, lookAhead - 1);
+    }
+
+    public long getBalanceSat(int highestReceiveIndex, int highestChangeIndex) throws IOException {
         long total = 0;
-        for (TxBuilder.Spendable s : collectSpendable()) total += s.valueSat;
+        for (TxBuilder.Spendable s : collectSpendable(highestReceiveIndex, highestChangeIndex)) {
+            total += s.valueSat;
+        }
         return total;
     }
 
@@ -75,7 +105,16 @@ public final class Wallet {
 
     public TxBuilder.Built createTransaction(String to, long amountSat, int changeIndex)
             throws IOException {
-        return TxBuilder.build(collectSpendable(), to, amountSat, api.getFeePerKb(),
+        return createTransaction(to, amountSat, changeIndex, lookAhead - 1, changeIndex);
+    }
+
+    public TxBuilder.Built createTransaction(String to, long amountSat, int changeIndex,
+                                             int highestReceiveIndex, int highestChangeIndex)
+            throws IOException {
+        int changeScan = Math.max(highestChangeIndex, changeIndex);
+        return TxBuilder.build(
+                collectSpendable(highestReceiveIndex, changeScan),
+                to, amountSat, api.getFeePerKb(),
                 changeAddress(changeIndex));
     }
 
@@ -85,7 +124,13 @@ public final class Wallet {
 
     /** Build, sign and broadcast a payment; returns the txid. */
     public String send(String to, long amountSat, int changeIndex) throws IOException {
-        TxBuilder.Built built = createTransaction(to, amountSat, changeIndex);
+        return send(to, amountSat, changeIndex, lookAhead - 1, changeIndex);
+    }
+
+    public String send(String to, long amountSat, int changeIndex,
+                       int highestReceiveIndex, int highestChangeIndex) throws IOException {
+        TxBuilder.Built built = createTransaction(to, amountSat, changeIndex,
+                highestReceiveIndex, highestChangeIndex);
         ApiClient.BroadcastResult r = api.broadcast(built.hex());
         if (!r.ok) throw new IOException("broadcast failed: " + r.error);
         return r.txid != null ? r.txid : built.txid();
