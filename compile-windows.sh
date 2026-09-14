@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
-# compile-windows.sh — Build Windows desktop package + Setup.exe on Ubuntu 22.04
+# compile-windows.sh — Build Windows desktop package on Ubuntu
 #
 # Produces:
-#   dist/windows/2x2-Wallet-windows/           (portable folder)
+#   dist/windows/2x2-Wallet.exe                    ← PRIMARY: self-contained (SFX)
+#   dist/windows/2x2-Wallet-windows/               (portable folder)
 #   dist/windows/2x2-wallet-desktop-windows.zip
-#   dist/windows/2x2-Wallet-Setup.exe          (optional NSIS installer)
+#   dist/windows/2x2-Wallet-Setup.exe              (optional classic installer)
 #
-# Portable use (no install):
-#   1. Unzip the zip
-#   2. Prefer 2x2-Wallet.cmd  (most antivirus-friendly)
-#      or 2x2-Wallet.exe       (NSIS stub launcher)
-#   If launch fails: run 2x2-Wallet-Debug.cmd and open 2x2-Wallet-error.log
-#
-# Bundles BellSoft Liberica JRE 17 Full (JavaFX included) — avoids separate
-# OpenJFX jars that often trigger "A JNI error has occurred" on Windows.
+# Self-contained exe embeds Liberica JRE 17 Full + app. On first/each launch it
+# extracts to %LOCALAPPDATA%\2x2-Wallet\runtime and starts the wallet.
+# Requires 64-bit Windows (x64).
 #
 # Usage:  bash compile-windows.sh
 #
@@ -28,9 +24,8 @@ PACKAGING_DIR="${SCRIPT_DIR}/packaging/windows"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BUILD_LOG="${LOG_DIR}/compile-windows-${TIMESTAMP}.log"
 ERROR_LOG="${LOG_DIR}/compile-windows-error-${TIMESTAMP}.log"
-APP_VERSION="1.3.2"
+APP_VERSION="1.3.3"
 
-# Liberica JRE Full = Temurin-class runtime + LibericaFX (JavaFX) in one tree.
 JRE_URL="https://download.bell-sw.com/java/17.0.13+12/bellsoft-jre17.0.13+12-windows-amd64-full.zip"
 JRE_ZIP_NAME="bellsoft-jre17.0.13+12-windows-amd64-full.zip"
 
@@ -137,27 +132,6 @@ PY
   ok "Icon: ${ico}"
 }
 
-build_nsis_launcher() {
-  local out_exe="$1"
-  info "Building NSIS portable launcher (2x2-Wallet.exe)..."
-  [[ -f "${PACKAGING_DIR}/2x2-Wallet-launcher.nsi" ]] || fail "Missing launcher.nsi"
-  cp "${PACKAGING_DIR}/2x2-Wallet-launcher.nsi" "${DIST_DIR}/2x2-Wallet-launcher.nsi"
-  local tmp_exe="${DIST_DIR}/2x2-Wallet-launcher-built.exe"
-  rm -f "${tmp_exe}" "${DIST_DIR}/2x2-Wallet.exe"
-  (
-    cd "${DIST_DIR}"
-    makensis \
-      -DAPP_VERSION="${APP_VERSION}" \
-      -DOUT_FILE="2x2-Wallet-launcher-built.exe" \
-      -DICON_FILE="2x2-Wallet.ico" \
-      "2x2-Wallet-launcher.nsi"
-  )
-  [[ -f "${tmp_exe}" ]] || fail "NSIS launcher was not produced"
-  mkdir -p "$(dirname "${out_exe}")"
-  mv -f "${tmp_exe}" "${out_exe}"
-  ok "Launcher: ${out_exe} ($(du -h "${out_exe}" | awk '{print $1}'))"
-}
-
 package_windows() {
   local jar="$1"
   local jre_dir="$2"
@@ -168,16 +142,18 @@ package_windows() {
   cp -a "${jre_dir}/." "${out}/jre/"
   cp "${DIST_DIR}/2x2-Wallet.ico" "${out}/2x2-Wallet.ico"
 
-  # No separate javafx\ folder — Liberica Full already has JavaFX + natives in jre\bin.
-  build_nsis_launcher "${out}/2x2-Wallet.exe"
-
-  # Primary antivirus-friendly entry (no custom PE).
   cat > "${out}/2x2-Wallet.cmd" << 'EOF'
 @echo off
 setlocal
 cd /d "%~dp0"
+echo %PROCESSOR_ARCHITECTURE% | find /I "ARM" >nul
+if %ERRORLEVEL%==0 (
+  echo 2X2 Wallet requires Windows x64. ARM is not supported in this build.
+  pause
+  exit /b 1
+)
 if not exist "jre\bin\javaw.exe" (
-  echo Missing jre\bin\javaw.exe — unzip the full portable folder.
+  echo Missing jre\bin\javaw.exe — use the self-contained 2x2-Wallet.exe instead.
   pause
   exit /b 1
 )
@@ -190,7 +166,6 @@ start "" "jre\bin\javaw.exe" --add-modules javafx.controls,javafx.graphics -jar 
 endlocal
 EOF
 
-  # Debug launcher: console + error log (use when you see the JNI dialog).
   cat > "${out}/2x2-Wallet-Debug.cmd" << 'EOF'
 @echo off
 setlocal
@@ -199,6 +174,7 @@ set LOG=%~dp02x2-Wallet-error.log
 echo ===== 2X2 Wallet debug launch ===== > "%LOG%"
 echo time: %DATE% %TIME%>> "%LOG%"
 echo cwd: %CD%>> "%LOG%"
+echo arch: %PROCESSOR_ARCHITECTURE%>> "%LOG%"
 echo.>> "%LOG%"
 if exist "jre\bin\java.exe" (
   "jre\bin\java.exe" -version >> "%LOG%" 2>&1
@@ -213,52 +189,67 @@ echo.>> "%LOG%"
 echo Exit code: %EC%>> "%LOG%"
 echo.
 echo Wrote log: %LOG%
-echo Exit code: %EC%
-echo.
 type "%LOG%"
 echo.
 pause
 endlocal
 EOF
 
-  # Backward-compatible names
   cp "${out}/2x2-Wallet.cmd" "${out}/2x2-Wallet.bat"
   cp "${out}/2x2-Wallet-Debug.cmd" "${out}/2x2-Wallet-Console.bat"
 
   cat > "${out}/README.txt" << 'EOF'
-2X2 Wallet — Windows portable (no installation)
+2X2 Wallet — Windows
 
-HOW TO RUN
-  1. Unzip this whole folder anywhere (Desktop, USB, Documents…)
-  2. Double-click:  2x2-Wallet.cmd     ← preferred (least antivirus false positives)
-     or:            2x2-Wallet.exe     ← NSIS stub (same JVM launch)
+PREFERRED: run the self-contained 2x2-Wallet.exe from dist/windows/
+(one file; extracts runtime under %LOCALAPPDATA%\2x2-Wallet).
 
-Do NOT move the .exe/.cmd alone. Keep jre\ and lib\ beside them.
+This folder is the portable unpack: keep jre\ + lib\ together and run 2x2-Wallet.cmd.
 
-This build uses BellSoft Liberica JRE 17 Full with JavaFX built in
-(no separate javafx\ folder). System Java is NOT required.
-
-IF YOU SEE "A JNI error has occurred"
-  1. Run 2x2-Wallet-Debug.cmd
-  2. Open 2x2-Wallet-error.log in this folder
-  3. Send that log for support
-
-KASPERSKY / ANTIVIRUS
-  Unsigned launchers are often quarantined by mistake.
-  Add this whole folder to trusted / exclusions, then restore
-  any quarantined file, or just use 2x2-Wallet.cmd.
+Requires 64-bit Windows (x64). Liberica JRE 17 Full is bundled (JavaFX included).
 EOF
 
   (cd "${DIST_DIR}" && zip -qr "2x2-wallet-desktop-windows.zip" "2x2-Wallet-windows")
   ok "Windows portable zip: ${DIST_DIR}/2x2-wallet-desktop-windows.zip"
 }
 
-build_setup_exe() {
-  info "Building Setup.exe with NSIS..."
-  [[ -f "${PACKAGING_DIR}/2x2-Wallet.nsi" ]] || fail "Missing ${PACKAGING_DIR}/2x2-Wallet.nsi"
+build_self_contained_exe() {
+  info "Building self-contained 2x2-Wallet.exe (embeds JRE + app)..."
+  [[ -f "${PACKAGING_DIR}/2x2-Wallet-sfx.nsi" ]] || fail "Missing 2x2-Wallet-sfx.nsi"
   [[ -d "${DIST_DIR}/2x2-Wallet-windows" ]] || fail "Payload folder missing"
-  [[ -f "${DIST_DIR}/2x2-Wallet.ico" ]] || fail "Icon missing"
 
+  cp "${PACKAGING_DIR}/2x2-Wallet-sfx.nsi" "${DIST_DIR}/2x2-Wallet-sfx.nsi"
+  rm -f "${DIST_DIR}/2x2-Wallet.exe"
+
+  local nsis_args=(
+    -DAPP_VERSION="${APP_VERSION}"
+    -DPAYLOAD_DIR="2x2-Wallet-windows"
+    -DOUT_FILE="2x2-Wallet.exe"
+    -DICON_FILE="2x2-Wallet.ico"
+  )
+
+  # Use amd64 stub when available (avoids broken PE32 stubs / "can't run on this PC").
+  if ls /usr/share/nsis/Stubs/amd64* >/dev/null 2>&1 \
+      || makensis -CMDHELP Target 2>&1 | grep -qi amd64; then
+    info "NSIS amd64 stub available"
+  else
+    warn "NSIS amd64 stub not found — using default stub (still requires Windows x64 for the JRE)."
+    # Strip Target line for older NSIS
+    sed -i '/^Target amd64-unicode/d' "${DIST_DIR}/2x2-Wallet-sfx.nsi"
+  fi
+
+  (
+    cd "${DIST_DIR}"
+    makensis "${nsis_args[@]}" "2x2-Wallet-sfx.nsi"
+  )
+  [[ -f "${DIST_DIR}/2x2-Wallet.exe" ]] || fail "Self-contained 2x2-Wallet.exe was not produced"
+  ok "Self-contained: ${DIST_DIR}/2x2-Wallet.exe ($(du -h "${DIST_DIR}/2x2-Wallet.exe" | awk '{print $1}'))"
+  file "${DIST_DIR}/2x2-Wallet.exe" || true
+}
+
+build_setup_exe() {
+  info "Building classic Setup.exe with NSIS..."
+  [[ -f "${PACKAGING_DIR}/2x2-Wallet.nsi" ]] || fail "Missing ${PACKAGING_DIR}/2x2-Wallet.nsi"
   cp "${PACKAGING_DIR}/2x2-Wallet.nsi" "${DIST_DIR}/2x2-Wallet.nsi"
   (
     cd "${DIST_DIR}"
@@ -284,13 +275,13 @@ main() {
   JRE_DIR="${CACHE_DIR}/windows-jre-full"
   make_icon
   package_windows "${JAR}" "${JRE_DIR}"
+  build_self_contained_exe
   build_setup_exe
   ok "Windows desktop build complete."
-  info "Artifacts (portable — no install):"
-  info "  ${DIST_DIR}/2x2-Wallet-windows/2x2-Wallet.cmd"
-  info "  ${DIST_DIR}/2x2-Wallet-windows/2x2-Wallet.exe"
+  info "PRIMARY (single file, all dependencies embedded):"
+  info "  ${DIST_DIR}/2x2-Wallet.exe"
+  info "Also:"
   info "  ${DIST_DIR}/2x2-wallet-desktop-windows.zip"
-  info "Optional installer:"
   info "  ${DIST_DIR}/2x2-Wallet-Setup.exe"
 }
 

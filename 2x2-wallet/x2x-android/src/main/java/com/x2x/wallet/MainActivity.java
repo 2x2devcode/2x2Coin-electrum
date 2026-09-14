@@ -167,10 +167,10 @@ public class MainActivity extends AppCompatActivity {
         });
 
         Bg.run(this, () -> {
-            // Probe receive address 0 for indexer scanning flag + aggregate balance.
-            ApiClient.Balance b0 = wallet.api().getBalance(wallet.receiveAddress(0));
-            long bal = wallet.getBalanceSat();
-            return new Object[] { bal, b0.scanning };
+            // Probe current deposit address for indexer flag + aggregate wallet balance.
+            ApiClient.Balance deposit = wallet.api().getBalance(wallet.receiveAddress(receiveIndex));
+            long bal = wallet.getBalanceSat(receiveIndex, changeIndex);
+            return new Object[] { bal, deposit.scanning };
         }, pack -> {
             long bal = (Long) pack[0];
             boolean scanning = (Boolean) pack[1];
@@ -195,7 +195,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadActivity() {
-        final int scan = Math.max(wallet.lookAhead, receiveIndex + 1);
+        final int scan = wallet.scanCount(receiveIndex);
         Bg.run(this, () -> {
             java.util.List<ApiClient.TxInfo> all = new java.util.ArrayList<>();
             java.util.Set<String> seen = new java.util.HashSet<>();
@@ -266,8 +266,9 @@ public class MainActivity extends AppCompatActivity {
 
         final long amountFinal = amountSat;
         final int useChange = changeIndex;
+        final int recvIdx = receiveIndex;
         Toast.makeText(this, "Estimating fee…", Toast.LENGTH_SHORT).show();
-        Bg.run(this, () -> wallet.createTransaction(to, amountFinal, useChange), built -> {
+        Bg.run(this, () -> wallet.createTransaction(to, amountFinal, useChange, recvIdx, useChange), built -> {
             String msg = "Send " + Amounts.satToCoins(amountFinal) + " 2X2\n"
                     + "To: " + to + "\n"
                     + "Network fee: " + Amounts.satToCoins(built.feeSat) + " 2X2\n"
@@ -278,7 +279,7 @@ public class MainActivity extends AppCompatActivity {
                     .setMessage(msg)
                     .setPositiveButton("Send", (d, w) ->
                             AuthHelper.requireAuth(this, storage, "Authorize payment",
-                                    () -> doSend(to, amountFinal, useChange)))
+                                    () -> doSend(to, amountFinal, useChange, recvIdx)))
                     .setNegativeButton("Cancel", null)
                     .show();
         }, e -> new AlertDialog.Builder(this)
@@ -288,9 +289,9 @@ public class MainActivity extends AppCompatActivity {
                 .show());
     }
 
-    private void doSend(String to, long amountSat, int useChange) {
+    private void doSend(String to, long amountSat, int useChange, int recvIdx) {
         Toast.makeText(this, "Broadcasting…", Toast.LENGTH_SHORT).show();
-        Bg.run(this, () -> wallet.send(to, amountSat, useChange), txid -> {
+        Bg.run(this, () -> wallet.send(to, amountSat, useChange, recvIdx, useChange), txid -> {
             // Rotate change address after a successful spend that may have created change.
             changeIndex = useChange + 1;
             storage.setChangeIndex(changeIndex);

@@ -37,21 +37,20 @@ bash compile-linux.sh
 # → dist/linux/2x2-wallet-desktop-linux.zip
 ```
 
-### Windows package (cross-built on Ubuntu 22.04)
+### Windows package (cross-built on Ubuntu)
 
 ```bash
 bash compile-windows.sh
-# → dist/windows/2x2-Wallet-windows/2x2-Wallet.cmd   (preferred — no custom PE)
-# → dist/windows/2x2-Wallet-windows/2x2-Wallet.exe   (NSIS stub launcher)
-# → dist/windows/2x2-wallet-desktop-windows.zip
-# → dist/windows/2x2-Wallet-Setup.exe                (optional installer)
+# → dist/windows/2x2-Wallet.exe                     (SELF-CONTAINED — preferred)
+# → dist/windows/2x2-wallet-desktop-windows.zip     (portable folder)
+# → dist/windows/2x2-Wallet-Setup.exe               (optional classic installer)
 ```
 
-**Portable (no install):** unzip and run **`2x2-Wallet.cmd`**. Bundles **Liberica JRE 17 Full** (JavaFX included) — no system Java.
+**Self-contained:** double-click `2x2-Wallet.exe` (embeds Liberica JRE 17 Full + app).
+It extracts under `%LOCALAPPDATA%\2x2-Wallet\runtime` and launches — no other files needed.
+Requires **64-bit Windows (x64)**.
 
-If Windows shows *“A JNI error has occurred”*, run **`2x2-Wallet-Debug.cmd`** and open **`2x2-Wallet-error.log`**.
-
-Kaspersky often quarantines unsigned `.exe` stubs — add the wallet folder to exclusions, or use `.cmd` only.
+If you see *“This app can’t run on your PC”*, you are not on Windows x64 (or the file was corrupted/quarantined) — re-download and use the new build.
 
 ### macOS (run on a Mac)
 
@@ -76,4 +75,4 @@ cd 2x2-wallet
 
 ## Version
 
-App version: **1.3.2** (`versionCode` 4).
+App version: **1.3.3** (`versionCode` 4).

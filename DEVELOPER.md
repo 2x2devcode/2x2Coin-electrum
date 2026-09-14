@@ -20,10 +20,10 @@ From the repository root you can also use:
 
 - `bash compile-android.sh` — APK on Ubuntu 22.04
 - `bash compile-linux.sh` — Linux desktop package on Ubuntu 22.04
-- `bash compile-windows.sh` — Windows **portable** package (+ optional Setup.exe) on Ubuntu 22.04
-  - Runtime: **BellSoft Liberica JRE 17 Full** (JavaFX built-in — avoids JNI dialogs from mismatched OpenJFX jars)
-  - Prefer `2x2-Wallet.cmd`; `2x2-Wallet.exe` is an NSIS stub (custom mingw launchers are often deleted by Kaspersky)
-  - On failure run `2x2-Wallet-Debug.cmd` → `2x2-Wallet-error.log`
+- `bash compile-windows.sh` — Windows package on Ubuntu
+  - **Primary:** self-contained `dist/windows/2x2-Wallet.exe` (embeds Liberica JRE 17 Full + app)
+  - Extracts to `%LOCALAPPDATA%\2x2-Wallet\runtime` on launch; requires Windows x64
+  - Home balance scans receive/change up to stored indices + gap (fixes missing deposit funds)
 - `bash compile-macos.sh` — macOS package (must run on macOS)
 
 The Android SDK is not required for `:x2x-core:test` or `:x2x-desktop:*`. `:x2x-android` is included only when `ANDROID_HOME` / `ANDROID_SDK_ROOT` or `local.properties` points at a valid SDK.
