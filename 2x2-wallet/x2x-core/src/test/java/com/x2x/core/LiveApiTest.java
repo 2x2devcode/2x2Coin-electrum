@@ -45,9 +45,15 @@ public class LiveApiTest {
     public void broadcastRejectsGarbageButReachesDaemon() throws Exception {
         assumeTrue("live disabled", live());
         ApiClient api = new ApiClient();
-        ApiClient.BroadcastResult r = api.broadcast("00");
-        System.out.println("[live] broadcast(garbage): ok=" + r.ok + " error=" + r.error);
-        // The daemon must have parsed our request (field name correct) and rejected the tx.
-        assertTrue(!r.ok && r.error != null && r.error.toLowerCase().contains("decode"));
+        try {
+            api.broadcast("00");
+            org.junit.Assert.fail("garbage broadcast should fail");
+        } catch (ApiException e) {
+            System.out.println("[live] broadcast(garbage): kind=" + e.getKind()
+                    + " status=" + e.getHttpStatus() + " msg=" + e.getUserMessage());
+            // Client errors must surface as typed invalid-tx (not raw JSON).
+            assertEquals(ApiException.Kind.INVALID_TX, e.getKind());
+            assertEquals(ApiException.MSG_INVALID_TX, e.getUserMessage());
+        }
     }
 }

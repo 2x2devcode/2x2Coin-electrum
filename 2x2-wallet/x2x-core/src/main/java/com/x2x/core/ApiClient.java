@@ -7,13 +7,16 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSocketFactory;
 
 import com.google.gson.JsonArray;
@@ -26,8 +29,19 @@ import com.google.gson.JsonParser;
  *
  * <p>Uses {@link HttpURLConnection} so the module stays pure-JVM (and Android-safe).
  * HTTPS calls use SPKI certificate pinning by default ({@link NetworkParameters#API_TLS_PINS}).
+ *
+ * <p>Retry policy:
+ * <ul>
+ *   <li>400 / 404 / 413 — never retry (especially {@code POST /api/tx/broadcast})</li>
+ *   <li>429 — backoff ({@code Retry-After} or ~2.5s), at most one extra attempt</li>
+ *   <li>5xx / timeout — up to 3 short attempts per host, then failover base URL</li>
+ * </ul>
  */
 public final class ApiClient {
+
+    private static final int MAX_SERVER_ATTEMPTS = 3;
+    private static final long DEFAULT_RATE_LIMIT_BACKOFF_MS = 2_500L;
+    private static final long SHORT_RETRY_BACKOFF_MS = 200L;
 
     private final String apiBase;
     private final String explorerBase;
@@ -38,6 +52,10 @@ public final class ApiClient {
     private Set<String> apiPins = NetworkParameters.API_TLS_PINS;
     private Set<String> explorerPins = NetworkParameters.EXPLORER_TLS_PINS;
     private boolean pinningEnabled = true;
+    private long rateLimitBackoffMs = DEFAULT_RATE_LIMIT_BACKOFF_MS;
+    private long shortRetryBackoffMs = SHORT_RETRY_BACKOFF_MS;
+    /** Test hook: counts HTTP round-trips performed by this client. */
+    final AtomicInteger requestCount = new AtomicInteger();
 
     public ApiClient() {
         this(NetworkParameters.OFFICIAL_API_BASE_URLS, NetworkParameters.EXPLORER_BASE_URLS);
@@ -66,13 +84,28 @@ public final class ApiClient {
     /** Override the SSL socket factory (tests / custom trust). */
     public void setSslSocketFactory(SSLSocketFactory f) { this.sslSocketFactory = f; }
 
-    /** Disable pinning (debug only). Prefer updating pins when certificates rotate. */
+    /**
+     * Disable pinning (debug / unit tests on plain HTTP only).
+     * Never disable in release builds — update {@link NetworkParameters} pins instead.
+     */
     public void setPinningEnabled(boolean enabled) {
         this.pinningEnabled = enabled;
         if (enabled) this.sslSocketFactory = TlsPinning.socketFactory(apiPins);
     }
 
+    /** Test-only: shorten 429 backoff. */
+    public void setRateLimitBackoffMs(long ms) {
+        this.rateLimitBackoffMs = Math.max(0L, ms);
+    }
+
+    /** Test-only: shorten 5xx/timeout backoff. */
+    public void setShortRetryBackoffMs(long ms) {
+        this.shortRetryBackoffMs = Math.max(0L, ms);
+    }
+
     public String apiBase() { return apiBase; }
+
+    public int getRequestCount() { return requestCount.get(); }
 
     // ---- responses ----
 
@@ -145,7 +178,6 @@ public final class ApiClient {
             x.valueSat = parseValueToSat(u, "valueSat", "satoshis", "value", "amount");
             x.height = firstLong(u, "height", "block_height", "confirmations");
             String spk = firstStringOrNull(u, "scriptPubKey", "script", "scriptpubkey");
-            // For P2PKH we can always reconstruct the script from our own address.
             x.scriptPubKey = spk != null ? Hex.decode(spk) : Address.p2pkhScript(address);
             out.add(x);
         }
@@ -171,42 +203,120 @@ public final class ApiClient {
     public BroadcastResult broadcast(String rawTxHex) throws IOException {
         JsonObject body = new JsonObject();
         body.addProperty("rawTx", rawTxHex);
-        JsonElement resEl = postJson("/api/tx/broadcast", body.toString());
+        JsonElement resEl = postJson("/api/tx/broadcast", body.toString(), true);
         JsonObject res = resEl.getAsJsonObject();
         BroadcastResult r = new BroadcastResult();
         if (res.has("error") && !res.get("error").isJsonNull()) {
-            r.ok = false; r.error = res.get("error").getAsString();
-        } else {
-            r.ok = true;
-            r.txid = firstStringOrNull(res, "txid", "txId", "result", "hash");
+            // Success HTTP with error field — treat as invalid tx, no raw JSON to UI.
+            throw new ApiException(ApiException.Kind.INVALID_TX, 200, ApiException.MSG_INVALID_TX);
         }
+        r.ok = true;
+        r.txid = firstStringOrNull(res, "txid", "txId", "result", "hash");
         return r;
     }
 
     // ---- http ----
 
     private JsonElement getJson(String path) throws IOException {
-        return JsonParser.parseString(requestWithFailover("GET", path, null));
+        return JsonParser.parseString(requestWithPolicy("GET", path, null, false));
     }
 
-    private JsonElement postJson(String path, String body) throws IOException {
-        return JsonParser.parseString(requestWithFailover("POST", path, body));
+    private JsonElement postJson(String path, String body, boolean broadcast) throws IOException {
+        return JsonParser.parseString(requestWithPolicy("POST", path, body, broadcast));
     }
 
-    private String requestWithFailover(String method, String path, String body) throws IOException {
-        IOException last = null;
+    private String requestWithPolicy(String method, String path, String body, boolean broadcast)
+            throws IOException {
+        ApiException lastClient = null;
+        IOException lastTransport = null;
+
         for (String base : apiBases) {
-            try {
-                return request(method, base + path, body, apiPins);
-            } catch (IOException e) {
-                last = e;
+            int serverAttempts = 0;
+            int rateLimitRetries = 0;
+
+            while (true) {
+                try {
+                    HttpResult hr = executeOnce(method, base + path, body);
+                    int code = hr.code;
+
+                    if (code >= 200 && code < 400) {
+                        return hr.body;
+                    }
+
+                    // Never retry definitive client errors (esp. broadcast 400).
+                    if (code == 400 || code == 404 || code == 413) {
+                        throw ApiException.fromHttpStatus(code, broadcast);
+                    }
+
+                    if (code == 429) {
+                        if (rateLimitRetries >= 1) {
+                            throw ApiException.fromHttpStatus(429, broadcast);
+                        }
+                        sleepQuiet(retryAfterMs(hr.retryAfterHeader));
+                        rateLimitRetries++;
+                        continue;
+                    }
+
+                    if (code >= 500 || code == 408) {
+                        serverAttempts++;
+                        if (serverAttempts >= MAX_SERVER_ATTEMPTS) {
+                            lastClient = ApiException.fromHttpStatus(code, broadcast);
+                            break; // try next base
+                        }
+                        sleepQuiet(shortRetryBackoffMs);
+                        continue;
+                    }
+
+                    // Other 4xx — no retry, no failover of the same bad request.
+                    throw ApiException.fromHttpStatus(code, broadcast);
+
+                } catch (ApiException e) {
+                    // Client errors must not rotate to another host with the same payload.
+                    if (e.getKind() == ApiException.Kind.INVALID_TX
+                            || e.getKind() == ApiException.Kind.INVALID_REQUEST
+                            || e.getKind() == ApiException.Kind.NOT_FOUND
+                            || e.getKind() == ApiException.Kind.RATE_LIMITED) {
+                        throw e;
+                    }
+                    lastClient = e;
+                    break;
+                } catch (SSLPeerUnverifiedException e) {
+                    throw new ApiException(ApiException.Kind.PIN_MISMATCH, 0, ApiException.MSG_PIN);
+                } catch (SocketTimeoutException e) {
+                    serverAttempts++;
+                    lastTransport = e;
+                    if (serverAttempts >= MAX_SERVER_ATTEMPTS) {
+                        break;
+                    }
+                    sleepQuiet(shortRetryBackoffMs);
+                } catch (IOException e) {
+                    serverAttempts++;
+                    lastTransport = e;
+                    if (serverAttempts >= MAX_SERVER_ATTEMPTS) {
+                        break;
+                    }
+                    sleepQuiet(shortRetryBackoffMs);
+                }
             }
         }
-        throw last != null ? last : new IOException("no API base URLs configured");
+
+        if (lastClient != null) throw lastClient;
+        throw new ApiException(ApiException.Kind.NETWORK, 0, ApiException.MSG_NETWORK);
     }
 
-    private String request(String method, String urlStr, String body, Set<String> pins)
-            throws IOException {
+    private static final class HttpResult {
+        final int code;
+        final String body;
+        final String retryAfterHeader;
+        HttpResult(int code, String body, String retryAfterHeader) {
+            this.code = code;
+            this.body = body;
+            this.retryAfterHeader = retryAfterHeader;
+        }
+    }
+
+    private HttpResult executeOnce(String method, String urlStr, String body) throws IOException {
+        requestCount.incrementAndGet();
         HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
         if (c instanceof HttpsURLConnection) {
             HttpsURLConnection https = (HttpsURLConnection) c;
@@ -226,15 +336,35 @@ public final class ApiClient {
         }
         int code = c.getResponseCode();
         if (pinningEnabled && c instanceof HttpsURLConnection) {
-            TlsPinning.verifyConnection((HttpsURLConnection) c, pins);
+            TlsPinning.verifyConnection((HttpsURLConnection) c, apiPins);
         }
         InputStream is = code >= 200 && code < 400 ? c.getInputStream() : c.getErrorStream();
         String text = is == null ? "" : readAll(is);
-        // The server returns JSON error bodies (e.g. {"error":"...TX decode failed"}) with
-        // 4xx/5xx codes. Surface those to the caller; only throw when there is no body.
-        if (code >= 400 && text.isEmpty())
-            throw new IOException("HTTP " + code + " with empty body from " + urlStr);
-        return text;
+        String retryAfter = c.getHeaderField("Retry-After");
+        return new HttpResult(code, text, retryAfter);
+    }
+
+    private long retryAfterMs(String header) {
+        if (header != null && !header.isBlank()) {
+            try {
+                long seconds = Long.parseLong(header.trim());
+                if (seconds >= 0 && seconds < 120) {
+                    return seconds * 1000L;
+                }
+            } catch (NumberFormatException ignored) {
+                // Fall through to default backoff.
+            }
+        }
+        return rateLimitBackoffMs;
+    }
+
+    private static void sleepQuiet(long ms) {
+        if (ms <= 0) return;
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static String readAll(InputStream is) throws IOException {
@@ -256,7 +386,6 @@ public final class ApiClient {
         for (String k : keys) {
             if (o.has(k) && !o.get(k).isJsonNull()) {
                 String s = o.get(k).getAsString();
-                // heuristic: a decimal point means coins, otherwise already satoshis
                 return s.contains(".") ? coinsToSat(s) : new BigInteger(s).longValueExact();
             }
         }

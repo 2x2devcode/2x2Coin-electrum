@@ -132,7 +132,9 @@ public final class Wallet {
         TxBuilder.Built built = createTransaction(to, amountSat, changeIndex,
                 highestReceiveIndex, highestChangeIndex);
         ApiClient.BroadcastResult r = api.broadcast(built.hex());
-        if (!r.ok) throw new IOException("broadcast failed: " + r.error);
+        if (!r.ok) {
+            throw new ApiException(ApiException.Kind.INVALID_TX, 0, ApiException.MSG_INVALID_TX);
+        }
         return r.txid != null ? r.txid : built.txid();
     }
 
