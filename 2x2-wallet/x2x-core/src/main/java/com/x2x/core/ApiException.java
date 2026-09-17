@@ -22,7 +22,8 @@ public final class ApiException extends IOException {
     public static final String MSG_NETWORK = "Rede indisponível. Tente de novo.";
     public static final String MSG_NOT_FOUND = "Recurso não encontrado";
     public static final String MSG_INVALID_REQUEST = "Pedido inválido";
-    public static final String MSG_PIN = "Falha de segurança TLS (pin).";
+    public static final String MSG_PIN =
+            "Falha de segurança TLS (pin). Atualize a carteira; no Windows apague %LOCALAPPDATA%\\2x2-Wallet e volte a abrir.";
 
     private final Kind kind;
     private final int httpStatus;

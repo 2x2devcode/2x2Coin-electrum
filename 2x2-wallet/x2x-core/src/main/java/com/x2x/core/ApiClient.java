@@ -346,7 +346,7 @@ public final class ApiClient {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "2x2-wallet/1.3");
+        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.4");
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
