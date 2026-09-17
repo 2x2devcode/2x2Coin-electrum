@@ -275,7 +275,8 @@ public final class ApiClient {
                     if (e.getKind() == ApiException.Kind.INVALID_TX
                             || e.getKind() == ApiException.Kind.INVALID_REQUEST
                             || e.getKind() == ApiException.Kind.NOT_FOUND
-                            || e.getKind() == ApiException.Kind.RATE_LIMITED) {
+                            || e.getKind() == ApiException.Kind.RATE_LIMITED
+                            || e.getKind() == ApiException.Kind.PIN_MISMATCH) {
                         throw e;
                     }
                     lastClient = e;
@@ -290,6 +291,9 @@ public final class ApiClient {
                     }
                     sleepQuiet(shortRetryBackoffMs);
                 } catch (IOException e) {
+                    if (isPinFailure(e)) {
+                        throw new ApiException(ApiException.Kind.PIN_MISMATCH, 0, ApiException.MSG_PIN);
+                    }
                     serverAttempts++;
                     lastTransport = e;
                     if (serverAttempts >= MAX_SERVER_ATTEMPTS) {
@@ -302,6 +306,22 @@ public final class ApiClient {
 
         if (lastClient != null) throw lastClient;
         throw new ApiException(ApiException.Kind.NETWORK, 0, ApiException.MSG_NETWORK);
+    }
+
+    private static boolean isPinFailure(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof SSLPeerUnverifiedException) return true;
+            String m = cur.getMessage();
+            if (m != null) {
+                String lower = m.toLowerCase();
+                if (lower.contains("pin mismatch") || lower.contains("certificate pin")) {
+                    return true;
+                }
+            }
+            cur = cur.getCause();
+        }
+        return false;
     }
 
     private static final class HttpResult {
