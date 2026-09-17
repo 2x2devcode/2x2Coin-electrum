@@ -163,6 +163,7 @@ public class MainActivity extends AppCompatActivity {
         }, e -> {
             tvStatus.setText("offline");
             tvStatus.setTextColor(ContextCompat.getColor(this, R.color.red));
+            Toast.makeText(this, com.x2x.core.ApiException.userMessage(e), Toast.LENGTH_LONG).show();
             maybeStopRefresh();
         });
 
@@ -183,7 +184,7 @@ public class MainActivity extends AppCompatActivity {
             }
             maybeStopRefresh();
         }, e -> {
-            Toast.makeText(this, "Could not refresh balance", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, com.x2x.core.ApiException.userMessage(e), Toast.LENGTH_SHORT).show();
             maybeStopRefresh();
         });
 

@@ -78,14 +78,18 @@ public final class NetworkParameters {
     /**
      * SHA-256 SPKI pins (Base64) for the official API host leaf certificate.
      * Update when the server TLS key rotates — see DEVELOPER.md.
+     * Current leaf (Let's Encrypt, SAN includes server + serverexplorer) plus previous
+     * pins kept briefly for rollover of older installs mid-update.
      */
     public static final Set<String> API_TLS_PINS = TlsPinning.pinsOf(
-            "901DCr7Jn2MOhdKSoe1+tE/itM0QNe0bGrc77NgzTvk="
+            "gDTqmm23QEzOQQYWCnoEhCHrMPyLZ93yQzSshVcLato=", // 2026-09 leaf (reuse-key recommended)
+            "901DCr7Jn2MOhdKSoe1+tE/itM0QNe0bGrc77NgzTvk="  // previous
     );
 
     /** SHA-256 SPKI pins (Base64) for the explorer host leaf certificate. */
     public static final Set<String> EXPLORER_TLS_PINS = TlsPinning.pinsOf(
-            "w3iMXmahnCVJ21hO1kapsob8NGeQ9GlWOpmCjY89/dU="
+            "gDTqmm23QEzOQQYWCnoEhCHrMPyLZ93yQzSshVcLato=", // same leaf as API (shared cert)
+            "w3iMXmahnCVJ21hO1kapsob8NGeQ9GlWOpmCjY89/dU="  // previous
     );
 
     /** Block explorer / website shown in the UI. */

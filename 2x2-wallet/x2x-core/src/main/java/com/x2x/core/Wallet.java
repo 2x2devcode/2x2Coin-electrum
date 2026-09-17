@@ -76,15 +76,31 @@ public final class Wallet {
         List<TxBuilder.Spendable> out = new ArrayList<>();
         int receiveN = scanCount(highestReceiveIndex);
         int changeN = scanCount(highestChangeIndex);
+        IOException lastNetwork = null;
+        int failures = 0;
         for (int c = 0; c < 2; c++) {
             int n = (c == 0) ? receiveN : changeN;
             for (int i = 0; i < n; i++) {
                 DerivedKey k = key(c, i);
-                for (ApiClient.Utxo u : api.getUtxos(k.address)) {
-                    out.add(new TxBuilder.Spendable(u.txid, u.vout, u.valueSat, u.scriptPubKey,
-                            k.priv, k.pub));
+                try {
+                    for (ApiClient.Utxo u : api.getUtxos(k.address)) {
+                        out.add(new TxBuilder.Spendable(u.txid, u.vout, u.valueSat, u.scriptPubKey,
+                                k.priv, k.pub));
+                    }
+                } catch (ApiException e) {
+                    // Don't abort the whole wallet scan on one bad address / transient 5xx.
+                    if (e.getKind() == ApiException.Kind.PIN_MISMATCH) throw e;
+                    failures++;
+                    lastNetwork = e;
+                } catch (IOException e) {
+                    failures++;
+                    lastNetwork = e;
                 }
             }
+        }
+        // If every probe failed, surface the network error; otherwise return partial UTXOs.
+        if (out.isEmpty() && lastNetwork != null && failures > 0) {
+            throw lastNetwork;
         }
         return out;
     }

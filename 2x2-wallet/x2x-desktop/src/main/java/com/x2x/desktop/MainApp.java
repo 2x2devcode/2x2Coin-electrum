@@ -418,10 +418,32 @@ public class MainApp extends Application {
         final int changeIdx = storage.getChangeIndex();
         final String depositAddr = wallet.receiveAddress(recvIdx);
         pool.execute(() -> {
+            ApiClient.Status s;
             try {
-                ApiClient.Status s = wallet.api().getStatus();
+                s = wallet.api().getStatus();
                 feePerKb = wallet.api().getFeePerKb();
-                // Probe the address the user is looking at (not only index 0).
+            } catch (Exception ex) {
+                Platform.runLater(() -> {
+                    statusLabel.setText("offline");
+                    statusLabel.setTextFill(Color.web("#E5484D"));
+                    activityLabel.setText(ApiException.userMessage(ex));
+                });
+                return;
+            }
+
+            final ApiClient.Status statusFinal = s;
+            Platform.runLater(() -> {
+                if (statusFinal.online) {
+                    statusLabel.setText("● Mainnet " + statusFinal.blocks);
+                    statusLabel.setTextFill(Color.web(GREEN));
+                } else {
+                    statusLabel.setText("offline");
+                    statusLabel.setTextFill(Color.web("#E5484D"));
+                }
+                feeLabel.setText("Fee rate: " + Amounts.satToCoins(feePerKb) + " 2X2 / kB");
+            });
+
+            try {
                 ApiClient.Balance depositBal = wallet.api().getBalance(depositAddr);
                 ApiClient.Balance b0 = recvIdx == 0 ? depositBal
                         : wallet.api().getBalance(wallet.receiveAddress(0));
@@ -447,30 +469,19 @@ public class MainApp extends Application {
                 final boolean scanningFinal = scanning;
                 final long depositSat = depositBal.confirmedSat;
                 Platform.runLater(() -> {
-                    if (s.online) {
-                        statusLabel.setText("● Mainnet " + s.blocks);
-                        statusLabel.setTextFill(Color.web(GREEN));
-                    } else {
-                        statusLabel.setText("offline");
-                        statusLabel.setTextFill(Color.web("#E5484D"));
-                    }
                     balanceLabel.setText(Amounts.satToCoins(bal));
                     if (depositBalanceLabel != null) {
                         depositBalanceLabel.setText("Deposit address balance: "
                                 + Amounts.satToCoins(depositSat) + " 2X2");
                     }
-                    feeLabel.setText("Fee rate: " + Amounts.satToCoins(feePerKb) + " 2X2 / kB");
                     syncLabel.setVisible(scanningFinal);
                     syncLabel.setText(scanningFinal
                             ? "Indexer syncing… balance may be incomplete" : "");
                     activityLabel.setText(activity);
                 });
             } catch (Exception ex) {
-                Platform.runLater(() -> {
-                    statusLabel.setText("offline");
-                    statusLabel.setTextFill(Color.web("#E5484D"));
-                    activityLabel.setText(ApiException.userMessage(ex));
-                });
+                Platform.runLater(() ->
+                        activityLabel.setText(ApiException.userMessage(ex)));
             }
         });
     }
