@@ -31,6 +31,7 @@ import javafx.stage.Stage;
 import com.x2x.core.Address;
 import com.x2x.core.Amounts;
 import com.x2x.core.ApiClient;
+import com.x2x.core.ApiException;
 import com.x2x.core.Bip39;
 import com.x2x.core.NetworkParameters;
 import com.x2x.core.Wallet;
@@ -468,7 +469,7 @@ public class MainApp extends Application {
                 Platform.runLater(() -> {
                     statusLabel.setText("offline");
                     statusLabel.setTextFill(Color.web("#E5484D"));
-                    activityLabel.setText("Could not refresh: " + ex.getMessage());
+                    activityLabel.setText(ApiException.userMessage(ex));
                 });
             }
         });
@@ -517,7 +518,8 @@ public class MainApp extends Application {
                 });
             } catch (Exception ex) {
                 Platform.runLater(() ->
-                        alert(Alert.AlertType.ERROR, "Cannot build transaction", ex.getMessage()));
+                        alert(Alert.AlertType.ERROR, "Cannot build transaction",
+                                ApiException.userMessage(ex)));
             }
         });
     }
@@ -536,7 +538,7 @@ public class MainApp extends Application {
                 });
             } catch (Exception ex) {
                 Platform.runLater(() ->
-                        alert(Alert.AlertType.ERROR, "Send failed", ex.getMessage()));
+                        alert(Alert.AlertType.ERROR, "Send failed", ApiException.userMessage(ex)));
             }
         });
     }

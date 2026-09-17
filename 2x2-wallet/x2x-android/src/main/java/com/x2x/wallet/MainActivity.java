@@ -284,7 +284,7 @@ public class MainActivity extends AppCompatActivity {
                     .show();
         }, e -> new AlertDialog.Builder(this)
                 .setTitle("Cannot build transaction")
-                .setMessage(String.valueOf(e.getMessage()))
+                .setMessage(com.x2x.core.ApiException.userMessage(e))
                 .setPositiveButton("OK", null)
                 .show());
     }
@@ -305,7 +305,7 @@ public class MainActivity extends AppCompatActivity {
             refresh();
         }, e -> new AlertDialog.Builder(this)
                 .setTitle("Send failed")
-                .setMessage(String.valueOf(e.getMessage()))
+                .setMessage(com.x2x.core.ApiException.userMessage(e))
                 .setPositiveButton("OK", null)
                 .show());
     }
