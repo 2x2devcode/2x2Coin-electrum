@@ -39,6 +39,16 @@ public class LiveApiTest {
 
         List<ApiClient.Utxo> utxos = api.getUtxos(sample);
         System.out.println("[live] utxos=" + utxos.size());
+
+        // Funded mainnet deposit: /balance shows 10 while wallet used to sum UTXOs as 0
+        // because the API field is amountSatoshis (not valueSat).
+        String funded = "2aEv33T2jg7iczvGtoVvvX2ERz1ZJDk7m2";
+        List<ApiClient.Utxo> fundedUtxos = api.getUtxos(funded);
+        long sum = 0;
+        for (ApiClient.Utxo u : fundedUtxos) sum += u.valueSat;
+        System.out.println("[live] funded utxos=" + fundedUtxos.size() + " sumSat=" + sum);
+        assertTrue("funded address should expose at least one UTXO", fundedUtxos.size() >= 1);
+        assertTrue("amountSatoshis must be parsed into valueSat", sum > 0);
     }
 
     @Test
