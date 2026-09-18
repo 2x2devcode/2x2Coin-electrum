@@ -5,7 +5,7 @@
 ; Built by: compile-windows.sh  →  dist/windows/2x2-Wallet.exe
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.3.3"
+  !define APP_VERSION "1.3.4"
 !endif
 !ifndef PAYLOAD_DIR
   !define PAYLOAD_DIR "2x2-Wallet-windows"
@@ -63,9 +63,12 @@ Section "Run"
   Push $ExistingVer
   Call Trim
   Pop $ExistingVer
+  ; Must match exactly — bump APP_VERSION whenever TLS pins / JAR change,
+  ; otherwise a stale runtime under %LOCALAPPDATA% keeps old pins ("certificate pin mismatch").
   StrCmp $ExistingVer "${APP_VERSION}" launch needs_extract
 
   needs_extract:
+    DetailPrint "Updating runtime to ${APP_VERSION}"
     RMDir /r "$AppDir\runtime"
     SetOutPath "$AppDir\runtime"
     File /r "${PAYLOAD_DIR}\*.*"
