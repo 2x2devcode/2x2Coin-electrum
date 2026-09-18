@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
@@ -152,5 +153,40 @@ public class ApiClientRetryTest {
         ApiException e = new ApiException(ApiException.Kind.NETWORK, 502, ApiException.MSG_NETWORK);
         assertEquals(ApiException.MSG_NETWORK, ApiException.userMessage(e));
         assertEquals(ApiException.MSG_NETWORK, ApiException.userMessage(new IOException("{\"error\":\"x\"}")));
+    }
+
+    /**
+     * Live server returns {@code amountSatoshis} (not {@code valueSat}). Without this key the wallet
+     * sums UTXOs as 0 while /balance still shows coins.
+     */
+    @Test
+    public void getUtxosParsesAmountSatoshis() throws Exception {
+        String body = "{"
+                + "\"utxos\":[{"
+                + "\"txid\":\"874218e55315afd7951f743accd0e5a948e3d1af483eaf41a18c1f0e2c37082e\","
+                + "\"vout\":1,"
+                + "\"amountSatoshis\":1000000000,"
+                + "\"confirmations\":5605"
+                + "}]}";
+        server.createContext("/api/address/2aEv33T2jg7iczvGtoVvvX2ERz1ZJDk7m2/utxos",
+                ex -> respond(ex, 200, body));
+        ApiClient api = client();
+        List<ApiClient.Utxo> utxos = api.getUtxos("2aEv33T2jg7iczvGtoVvvX2ERz1ZJDk7m2");
+        assertEquals(1, utxos.size());
+        assertEquals(1_000_000_000L, utxos.get(0).valueSat);
+        assertEquals(
+                "874218e55315afd7951f743accd0e5a948e3d1af483eaf41a18c1f0e2c37082e",
+                utxos.get(0).txid);
+        assertEquals(1L, utxos.get(0).vout);
+    }
+
+    @Test
+    public void getUtxosStillAcceptsValueSatFallback() throws Exception {
+        String addr = "2aEv33T2jg7iczvGtoVvvX2ERz1ZJDk7m2";
+        String body = "{\"utxos\":[{\"txid\":\"aa\",\"vout\":0,\"valueSat\":500000000}]}";
+        server.createContext("/api/address/" + addr + "/utxos", ex -> respond(ex, 200, body));
+        List<ApiClient.Utxo> utxos = client().getUtxos(addr);
+        assertEquals(1, utxos.size());
+        assertEquals(500_000_000L, utxos.get(0).valueSat);
     }
 }

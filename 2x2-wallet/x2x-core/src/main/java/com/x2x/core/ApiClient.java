@@ -175,7 +175,7 @@ public final class ApiClient {
             Utxo x = new Utxo();
             x.txid = firstString(u, "txid", "tx_hash", "hash");
             x.vout = firstLong(u, "vout", "n", "outputIndex", "output_n");
-            x.valueSat = parseValueToSat(u, "valueSat", "satoshis", "value", "amount");
+            x.valueSat = parseValueToSat(u, "amountSatoshis", "valueSat", "satoshis", "value", "amount");
             x.height = firstLong(u, "height", "block_height", "confirmations");
             String spk = firstStringOrNull(u, "scriptPubKey", "script", "scriptpubkey");
             x.scriptPubKey = spk != null ? Hex.decode(spk) : Address.p2pkhScript(address);
@@ -346,7 +346,7 @@ public final class ApiClient {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.4");
+        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.5");
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
