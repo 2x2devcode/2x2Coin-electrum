@@ -29,9 +29,12 @@ import com.journeyapps.barcodescanner.ScanContract;
 import com.journeyapps.barcodescanner.ScanOptions;
 import com.x2x.core.Address;
 import com.x2x.core.ApiClient;
+import com.x2x.core.AppLog;
 import com.x2x.core.NetworkParameters;
 import com.x2x.core.TxBuilder;
 import com.x2x.core.Wallet;
+
+import java.nio.file.Paths;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -65,6 +68,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        AppLog.setLogDirectory(Paths.get(getFilesDir().getAbsolutePath(), "logs"));
+        AppLog.info("android app starting log=" + AppLog.logFile());
         storage = new WalletStorage(this);
         String mnemonic = storage.getMnemonic();
         if (mnemonic == null) {
@@ -332,7 +337,9 @@ public class MainActivity extends AppCompatActivity {
             refresh();
         }, e -> new AlertDialog.Builder(this)
                 .setTitle("Send failed")
-                .setMessage(com.x2x.core.ApiException.userMessage(e))
+                .setMessage(com.x2x.core.ApiException.userMessage(e)
+                        + "\n\nDetails were saved to:\n"
+                        + AppLog.logFileDisplayPath())
                 .setPositiveButton("OK", null)
                 .show());
     }
