@@ -45,7 +45,7 @@ public final class ApiClient {
     private static final long DEFAULT_RATE_LIMIT_BACKOFF_MS = 2_500L;
     private static final long SHORT_RETRY_BACKOFF_MS = 200L;
     /** Minimum spacing between HTTP calls to reduce 429s during wallet scans. */
-    private static final long DEFAULT_MIN_REQUEST_INTERVAL_MS = 80L;
+    private static final long DEFAULT_MIN_REQUEST_INTERVAL_MS = 150L;
 
     private final String apiBase;
     private final String explorerBase;
@@ -369,7 +369,7 @@ public final class ApiClient {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.6");
+        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.7");
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");

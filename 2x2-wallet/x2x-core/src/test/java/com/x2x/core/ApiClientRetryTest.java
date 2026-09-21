@@ -156,6 +156,25 @@ public class ApiClientRetryTest {
         assertEquals(ApiException.MSG_NETWORK, ApiException.userMessage(new IOException("{\"error\":\"x\"}")));
     }
 
+    @Test
+    public void rateLimitMessagesAreEnglish() {
+        assertEquals("Too many requests. Please wait and try again.", ApiException.MSG_RATE_LIMITED);
+        assertTrue(!ApiException.MSG_RATE_LIMITED.toLowerCase().contains("demasiados"));
+        assertTrue(ApiException.isRateLimited(
+                new ApiException(ApiException.Kind.RATE_LIMITED, 429, ApiException.MSG_RATE_LIMITED)));
+    }
+
+    @Test
+    public void getBalanceParsesDecimalCoins() throws Exception {
+        String addr = "2aEv33T2jg7iczvGtoVvvX2ERz1ZJDk7m2";
+        server.createContext("/api/address/" + addr + "/balance",
+                ex -> respond(ex, 200,
+                        "{\"balance\":\"10.00000000\",\"address\":\"" + addr
+                                + "\",\"scanning\":false,\"chainTip\":1,\"indexedHeight\":1}"));
+        ApiClient.Balance b = client().getBalance(addr);
+        assertEquals(1_000_000_000L, b.confirmedSat);
+    }
+
     /**
      * Live server returns {@code amountSatoshis} (not {@code valueSat}). Without this key the wallet
      * sums UTXOs as 0 while /balance still shows coins.

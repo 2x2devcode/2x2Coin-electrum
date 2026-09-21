@@ -73,54 +73,79 @@ public final class Wallet {
      */
     public List<TxBuilder.Spendable> collectSpendable(int highestReceiveIndex, int highestChangeIndex)
             throws IOException {
+        return collectSpendable(highestReceiveIndex, highestChangeIndex, Long.MAX_VALUE);
+    }
+
+    /**
+     * Collect UTXOs with minimal API traffic. Scans known receive/change indices first
+     * (plus a small gap), stops once {@code needSat} is covered, and never walks the full
+     * BIP44 look-ahead window on every call (that trips server rate limits).
+     */
+    public List<TxBuilder.Spendable> collectSpendable(int highestReceiveIndex, int highestChangeIndex,
+                                                      long needSat) throws IOException {
         List<TxBuilder.Spendable> out = new ArrayList<>();
-        int receiveN = scanCount(highestReceiveIndex);
-        int changeN = scanCount(highestChangeIndex);
-        IOException lastNetwork = null;
-        int failures = 0;
-        for (int c = 0; c < 2; c++) {
-            int n = (c == 0) ? receiveN : changeN;
-            int highestKnown = (c == 0) ? highestReceiveIndex : highestChangeIndex;
-            int consecutiveEmpty = 0;
-            for (int i = 0; i < n; i++) {
-                DerivedKey k = key(c, i);
-                try {
-                    List<ApiClient.Utxo> utxos = api.getUtxos(k.address);
-                    if (utxos.isEmpty()) {
-                        consecutiveEmpty++;
-                    } else {
-                        consecutiveEmpty = 0;
-                        for (ApiClient.Utxo u : utxos) {
-                            out.add(new TxBuilder.Spendable(u.txid, u.vout, u.valueSat, u.scriptPubKey,
-                                    k.priv, k.pub));
-                        }
-                    }
-                    // BIP44-style gap: stop after lookAhead unused addresses past the known tip.
-                    if (i >= highestKnown && consecutiveEmpty >= lookAhead) {
-                        break;
-                    }
-                } catch (ApiException e) {
-                    if (e.getKind() == ApiException.Kind.PIN_MISMATCH) throw e;
-                    // Stop hammering the API once rate-limited; keep any UTXOs already found.
-                    if (e.getKind() == ApiException.Kind.RATE_LIMITED) {
-                        if (!out.isEmpty()) return out;
-                        throw e;
-                    }
-                    failures++;
-                    lastNetwork = e;
-                    consecutiveEmpty++;
-                } catch (IOException e) {
-                    failures++;
-                    lastNetwork = e;
-                    consecutiveEmpty++;
-                }
+        int gap = Math.min(3, lookAhead); // light discovery beyond the known tip
+        int receiveN = Math.max(0, highestReceiveIndex) + 1 + gap;
+        int changeN = Math.max(0, highestChangeIndex) + 1 + gap;
+
+        scanChainForUtxos(out, 0, receiveN, needSat);
+        if (sumSat(out) >= needSat) return out;
+        scanChainForUtxos(out, 1, changeN, needSat);
+        if (sumSat(out) >= needSat) return out;
+
+        // Last resort: if still empty (e.g. rate-limited on first pass), pause and retry
+        // only the primary deposit + change tips once.
+        if (out.isEmpty()) {
+            sleepQuiet(3_000L);
+            scanChainForUtxos(out, 0, Math.max(1, highestReceiveIndex + 1), needSat);
+            if (out.isEmpty()) {
+                scanChainForUtxos(out, 1, Math.max(1, highestChangeIndex + 1), needSat);
             }
         }
-        // If every probe failed, surface the network error; otherwise return partial UTXOs.
-        if (out.isEmpty() && lastNetwork != null && failures > 0) {
-            throw lastNetwork;
-        }
         return out;
+    }
+
+    private void scanChainForUtxos(List<TxBuilder.Spendable> out, int change, int count, long needSat)
+            throws IOException {
+        IOException lastNetwork = null;
+        for (int i = 0; i < count; i++) {
+            if (sumSat(out) >= needSat) return;
+            DerivedKey k = key(change, i);
+            try {
+                List<ApiClient.Utxo> utxos = api.getUtxos(k.address);
+                for (ApiClient.Utxo u : utxos) {
+                    out.add(new TxBuilder.Spendable(u.txid, u.vout, u.valueSat, u.scriptPubKey,
+                            k.priv, k.pub));
+                }
+            } catch (ApiException e) {
+                if (e.getKind() == ApiException.Kind.PIN_MISMATCH) throw e;
+                if (e.getKind() == ApiException.Kind.RATE_LIMITED) {
+                    // Keep what we have; do not probe dozens more addresses into a hot limit.
+                    if (!out.isEmpty()) return;
+                    lastNetwork = e;
+                    break;
+                }
+                lastNetwork = e;
+            } catch (IOException e) {
+                lastNetwork = e;
+            }
+        }
+        if (out.isEmpty() && lastNetwork != null) throw lastNetwork;
+    }
+
+    private static long sumSat(List<TxBuilder.Spendable> utxos) {
+        long t = 0;
+        for (TxBuilder.Spendable s : utxos) t += s.valueSat;
+        return t;
+    }
+
+    private static void sleepQuiet(long ms) {
+        if (ms <= 0) return;
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public long getBalanceSat() throws IOException {
@@ -135,6 +160,39 @@ public final class Wallet {
         return total;
     }
 
+    /**
+     * Cheap confirmed balance for UI refresh: sums {@code /balance} for known receive/change
+     * indices only (no look-ahead UTXO storm). Use {@link #collectSpendable(int, int, long)}
+     * when building a spend.
+     */
+    public long getKnownBalancesSat(int highestReceiveIndex, int highestChangeIndex)
+            throws IOException {
+        long total = 0;
+        IOException last = null;
+        int failures = 0;
+        for (int c = 0; c < 2; c++) {
+            int n = Math.max(0, c == 0 ? highestReceiveIndex : highestChangeIndex) + 1;
+            for (int i = 0; i < n; i++) {
+                try {
+                    total += api.getBalance(key(c, i).address).confirmedSat;
+                } catch (ApiException e) {
+                    if (e.getKind() == ApiException.Kind.PIN_MISMATCH) throw e;
+                    if (e.getKind() == ApiException.Kind.RATE_LIMITED) {
+                        if (total > 0) return total;
+                        throw e;
+                    }
+                    failures++;
+                    last = e;
+                } catch (IOException e) {
+                    failures++;
+                    last = e;
+                }
+            }
+        }
+        if (total == 0 && last != null && failures > 0) throw last;
+        return total;
+    }
+
     public long feePerKb() throws IOException { return api.getFeePerKb(); }
 
     public TxBuilder.Built createTransaction(String to, long amountSat, int changeIndex)
@@ -146,8 +204,12 @@ public final class Wallet {
                                              int highestReceiveIndex, int highestChangeIndex)
             throws IOException {
         int changeScan = Math.max(highestChangeIndex, changeIndex);
+        // Let the API rate-limit window cool down after a UI refresh storm.
+        sleepQuiet(1_500L);
+        // Rough ceiling so we stop the UTXO scan once we have enough (avoids rate limits).
+        long needSat = amountSat + Math.max(NetworkParameters.DEFAULT_FEE_PER_KB, 10_000L);
         return TxBuilder.build(
-                collectSpendable(highestReceiveIndex, changeScan),
+                collectSpendable(highestReceiveIndex, changeScan, needSat),
                 to, amountSat, api.getFeePerKb(),
                 changeAddress(changeIndex));
     }

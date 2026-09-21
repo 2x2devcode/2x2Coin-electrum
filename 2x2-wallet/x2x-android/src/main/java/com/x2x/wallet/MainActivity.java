@@ -168,13 +168,13 @@ public class MainActivity extends AppCompatActivity {
         });
 
         Bg.run(this, () -> {
-            // Probe current deposit address for indexer flag + aggregate wallet balance.
+            // Probe current deposit address for indexer flag + cheap known-address balances.
             ApiClient.Balance deposit = wallet.api().getBalance(wallet.receiveAddress(receiveIndex));
             long bal;
             try {
-                bal = wallet.getBalanceSat(receiveIndex, changeIndex);
+                bal = wallet.getKnownBalancesSat(receiveIndex, changeIndex);
+                if (bal <= 0 && deposit.confirmedSat > 0) bal = deposit.confirmedSat;
             } catch (Exception e) {
-                // Fall back to deposit /balance so rate limits cannot hide funds.
                 if (deposit.confirmedSat > 0) bal = deposit.confirmedSat;
                 else throw e;
             }
@@ -203,23 +203,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadActivity() {
-        // Only known receive indices — full look-ahead spam triggers API 429s.
-        final int scan = Math.max(1, receiveIndex + 1);
+        final String deposit = wallet.receiveAddress(receiveIndex);
         Bg.run(this, () -> {
             java.util.List<ApiClient.TxInfo> all = new java.util.ArrayList<>();
             java.util.Set<String> seen = new java.util.HashSet<>();
-            for (int i = 0; i < scan; i++) {
-                try {
-                    for (ApiClient.TxInfo t : wallet.api().getTxs(wallet.receiveAddress(i))) {
-                        String id = t.txid == null ? "" : t.txid;
-                        if (!id.isEmpty() && seen.add(id)) all.add(t);
-                    }
-                } catch (com.x2x.core.ApiException e) {
-                    if (e.getKind() == com.x2x.core.ApiException.Kind.RATE_LIMITED && !all.isEmpty()) {
-                        break;
-                    }
-                    throw e;
+            try {
+                for (ApiClient.TxInfo t : wallet.api().getTxs(deposit)) {
+                    String id = t.txid == null ? "" : t.txid;
+                    if (!id.isEmpty() && seen.add(id)) all.add(t);
                 }
+            } catch (com.x2x.core.ApiException e) {
+                // Soft-fail rate limits: empty activity is better than an error banner.
+                if (e.getKind() == com.x2x.core.ApiException.Kind.RATE_LIMITED) {
+                    return all;
+                }
+                throw e;
             }
             return all;
         }, list -> {
@@ -241,7 +239,7 @@ public class MainActivity extends AppCompatActivity {
             }
             swipeRefresh.setRefreshing(false);
         }, e -> {
-            tvActivity.setText(com.x2x.core.ApiException.userMessage(e));
+            tvActivity.setText("No transactions yet");
             swipeRefresh.setRefreshing(false);
         });
     }
@@ -300,7 +298,9 @@ public class MainActivity extends AppCompatActivity {
                     .show();
         }, e -> new AlertDialog.Builder(this)
                 .setTitle("Cannot build transaction")
-                .setMessage(com.x2x.core.ApiException.userMessage(e))
+                .setMessage(com.x2x.core.ApiException.isRateLimited(e)
+                        ? "Server is busy. Wait a few seconds, then try Send again."
+                        : com.x2x.core.ApiException.userMessage(e))
                 .setPositiveButton("OK", null)
                 .show());
     }
@@ -321,7 +321,9 @@ public class MainActivity extends AppCompatActivity {
             refresh();
         }, e -> new AlertDialog.Builder(this)
                 .setTitle("Send failed")
-                .setMessage(com.x2x.core.ApiException.userMessage(e))
+                .setMessage(com.x2x.core.ApiException.isRateLimited(e)
+                        ? "Server is busy. Wait a few seconds, then try Send again."
+                        : com.x2x.core.ApiException.userMessage(e))
                 .setPositiveButton("OK", null)
                 .show());
     }
