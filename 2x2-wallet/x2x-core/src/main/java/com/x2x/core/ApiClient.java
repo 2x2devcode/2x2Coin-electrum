@@ -244,11 +244,14 @@ public final class ApiClient {
         JsonObject res = resEl.getAsJsonObject();
         BroadcastResult r = new BroadcastResult();
         if (res.has("error") && !res.get("error").isJsonNull()) {
+            AppLog.warn("broadcast JSON error field=" + AppLog.truncate(res.get("error").toString(), 400)
+                    + " hexLen=" + (rawTxHex == null ? 0 : rawTxHex.length() / 2));
             // Success HTTP with error field — treat as invalid tx, no raw JSON to UI.
             throw new ApiException(ApiException.Kind.INVALID_TX, 200, ApiException.MSG_INVALID_TX);
         }
         r.ok = true;
         r.txid = firstStringOrNull(res, "txid", "txId", "result", "hash");
+        AppLog.info("broadcast ok txid=" + r.txid);
         return r;
     }
 
@@ -282,10 +285,18 @@ public final class ApiClient {
 
                     // Never retry definitive client errors (esp. broadcast 400).
                     if (code == 400 || code == 404 || code == 413) {
+                        if (broadcast) {
+                            AppLog.warn("broadcast HTTP " + code + " base=" + base
+                                    + " body=" + AppLog.truncate(hr.body, 500));
+                        }
                         throw ApiException.fromHttpStatus(code, broadcast);
                     }
 
                     if (code == 429) {
+                        if (broadcast) {
+                            AppLog.warn("broadcast HTTP 429 base=" + base
+                                    + " body=" + AppLog.truncate(hr.body, 300));
+                        }
                         if (rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) {
                             throw ApiException.fromHttpStatus(429, broadcast);
                         }
@@ -295,6 +306,11 @@ public final class ApiClient {
                     }
 
                     if (code >= 500 || code == 408) {
+                        if (broadcast) {
+                            AppLog.warn("broadcast HTTP " + code + " base=" + base
+                                    + " attempt=" + (serverAttempts + 1)
+                                    + " body=" + AppLog.truncate(hr.body, 300));
+                        }
                         serverAttempts++;
                         if (serverAttempts >= MAX_SERVER_ATTEMPTS) {
                             lastClient = ApiException.fromHttpStatus(code, broadcast);
@@ -396,7 +412,7 @@ public final class ApiClient {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.10");
+        c.setRequestProperty("User-Agent", "2x2-wallet/" + AppLog.APP_VERSION);
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
