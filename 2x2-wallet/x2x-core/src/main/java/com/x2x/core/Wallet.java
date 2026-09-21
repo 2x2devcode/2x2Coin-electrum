@@ -80,21 +80,39 @@ public final class Wallet {
         int failures = 0;
         for (int c = 0; c < 2; c++) {
             int n = (c == 0) ? receiveN : changeN;
+            int highestKnown = (c == 0) ? highestReceiveIndex : highestChangeIndex;
+            int consecutiveEmpty = 0;
             for (int i = 0; i < n; i++) {
                 DerivedKey k = key(c, i);
                 try {
-                    for (ApiClient.Utxo u : api.getUtxos(k.address)) {
-                        out.add(new TxBuilder.Spendable(u.txid, u.vout, u.valueSat, u.scriptPubKey,
-                                k.priv, k.pub));
+                    List<ApiClient.Utxo> utxos = api.getUtxos(k.address);
+                    if (utxos.isEmpty()) {
+                        consecutiveEmpty++;
+                    } else {
+                        consecutiveEmpty = 0;
+                        for (ApiClient.Utxo u : utxos) {
+                            out.add(new TxBuilder.Spendable(u.txid, u.vout, u.valueSat, u.scriptPubKey,
+                                    k.priv, k.pub));
+                        }
+                    }
+                    // BIP44-style gap: stop after lookAhead unused addresses past the known tip.
+                    if (i >= highestKnown && consecutiveEmpty >= lookAhead) {
+                        break;
                     }
                 } catch (ApiException e) {
-                    // Don't abort the whole wallet scan on one bad address / transient 5xx.
                     if (e.getKind() == ApiException.Kind.PIN_MISMATCH) throw e;
+                    // Stop hammering the API once rate-limited; keep any UTXOs already found.
+                    if (e.getKind() == ApiException.Kind.RATE_LIMITED) {
+                        if (!out.isEmpty()) return out;
+                        throw e;
+                    }
                     failures++;
                     lastNetwork = e;
+                    consecutiveEmpty++;
                 } catch (IOException e) {
                     failures++;
                     lastNetwork = e;
+                    consecutiveEmpty++;
                 }
             }
         }

@@ -40,8 +40,12 @@ import com.google.gson.JsonParser;
 public final class ApiClient {
 
     private static final int MAX_SERVER_ATTEMPTS = 3;
+    /** Extra attempts after the first 429 (total tries = 1 + this). */
+    private static final int MAX_RATE_LIMIT_RETRIES = 3;
     private static final long DEFAULT_RATE_LIMIT_BACKOFF_MS = 2_500L;
     private static final long SHORT_RETRY_BACKOFF_MS = 200L;
+    /** Minimum spacing between HTTP calls to reduce 429s during wallet scans. */
+    private static final long DEFAULT_MIN_REQUEST_INTERVAL_MS = 80L;
 
     private final String apiBase;
     private final String explorerBase;
@@ -54,6 +58,9 @@ public final class ApiClient {
     private boolean pinningEnabled = true;
     private long rateLimitBackoffMs = DEFAULT_RATE_LIMIT_BACKOFF_MS;
     private long shortRetryBackoffMs = SHORT_RETRY_BACKOFF_MS;
+    private long minRequestIntervalMs = DEFAULT_MIN_REQUEST_INTERVAL_MS;
+    private final Object requestPaceLock = new Object();
+    private long lastRequestAtMs = 0L;
     /** Test hook: counts HTTP round-trips performed by this client. */
     final AtomicInteger requestCount = new AtomicInteger();
 
@@ -101,6 +108,11 @@ public final class ApiClient {
     /** Test-only: shorten 5xx/timeout backoff. */
     public void setShortRetryBackoffMs(long ms) {
         this.shortRetryBackoffMs = Math.max(0L, ms);
+    }
+
+    /** Test-only: disable or shorten inter-request pacing. */
+    public void setMinRequestIntervalMs(long ms) {
+        this.minRequestIntervalMs = Math.max(0L, ms);
     }
 
     public String apiBase() { return apiBase; }
@@ -249,7 +261,7 @@ public final class ApiClient {
                     }
 
                     if (code == 429) {
-                        if (rateLimitRetries >= 1) {
+                        if (rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) {
                             throw ApiException.fromHttpStatus(429, broadcast);
                         }
                         sleepQuiet(retryAfterMs(hr.retryAfterHeader));
@@ -335,7 +347,18 @@ public final class ApiClient {
         }
     }
 
+    private void paceRequest() {
+        if (minRequestIntervalMs <= 0) return;
+        synchronized (requestPaceLock) {
+            long now = System.currentTimeMillis();
+            long wait = lastRequestAtMs + minRequestIntervalMs - now;
+            if (wait > 0) sleepQuiet(wait);
+            lastRequestAtMs = System.currentTimeMillis();
+        }
+    }
+
     private HttpResult executeOnce(String method, String urlStr, String body) throws IOException {
+        paceRequest();
         requestCount.incrementAndGet();
         HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
         if (c instanceof HttpsURLConnection) {
@@ -346,7 +369,7 @@ public final class ApiClient {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.5");
+        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.6");
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");

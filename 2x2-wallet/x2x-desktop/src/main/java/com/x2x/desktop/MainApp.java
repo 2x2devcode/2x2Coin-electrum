@@ -447,29 +447,11 @@ public class MainApp extends Application {
                 ApiClient.Balance depositBal = wallet.api().getBalance(depositAddr);
                 ApiClient.Balance b0 = recvIdx == 0 ? depositBal
                         : wallet.api().getBalance(wallet.receiveAddress(0));
-                boolean scanning = depositBal.scanning || b0.scanning;
-                long bal = wallet.getBalanceSat(recvIdx, changeIdx);
-                StringBuilder act = new StringBuilder();
-                java.util.Set<String> seen = new java.util.HashSet<>();
-                int scan = wallet.scanCount(recvIdx);
-                for (int i = 0; i < scan; i++) {
-                    for (ApiClient.TxInfo t : wallet.api().getTxs(wallet.receiveAddress(i))) {
-                        String id = t.txid == null ? "" : t.txid;
-                        if (id.isEmpty() || !seen.add(id)) continue;
-                        if (act.length() > 0) act.append('\n');
-                        String shortId = id.length() > 18
-                                ? id.substring(0, 10) + "…" + id.substring(id.length() - 6) : id;
-                        act.append(shortId);
-                        if (t.amount != null) act.append("   ").append(t.amount).append(" 2X2");
-                        if (seen.size() >= 12) break;
-                    }
-                    if (seen.size() >= 12) break;
-                }
-                String activity = act.length() == 0 ? "No transactions yet" : act.toString();
-                final boolean scanningFinal = scanning;
+                final boolean scanningFinal = depositBal.scanning || b0.scanning;
                 final long depositSat = depositBal.confirmedSat;
+
+                // Show deposit balance immediately so Activity/rate-limit failures cannot hide funds.
                 Platform.runLater(() -> {
-                    balanceLabel.setText(Amounts.satToCoins(bal));
                     if (depositBalanceLabel != null) {
                         depositBalanceLabel.setText("Deposit address balance: "
                                 + Amounts.satToCoins(depositSat) + " 2X2");
@@ -477,8 +459,46 @@ public class MainApp extends Application {
                     syncLabel.setVisible(scanningFinal);
                     syncLabel.setText(scanningFinal
                             ? "Indexer syncing… balance may be incomplete" : "");
-                    activityLabel.setText(activity);
+                    // Provisional wallet balance until UTXO scan completes.
+                    if (depositSat > 0) {
+                        balanceLabel.setText(Amounts.satToCoins(depositSat));
+                    }
                 });
+
+                long bal = depositSat;
+                try {
+                    bal = wallet.getBalanceSat(recvIdx, changeIdx);
+                } catch (Exception balEx) {
+                    // Keep deposit balance as fallback when the UTXO scan is rate-limited.
+                    if (depositSat <= 0) throw balEx;
+                }
+                final long balFinal = bal;
+                Platform.runLater(() -> balanceLabel.setText(Amounts.satToCoins(balFinal)));
+
+                // Activity is separate: only probe known receive indices (not the full look-ahead).
+                StringBuilder act = new StringBuilder();
+                java.util.Set<String> seen = new java.util.HashSet<>();
+                int activityScan = Math.max(1, recvIdx + 1);
+                try {
+                    for (int i = 0; i < activityScan; i++) {
+                        for (ApiClient.TxInfo t : wallet.api().getTxs(wallet.receiveAddress(i))) {
+                            String id = t.txid == null ? "" : t.txid;
+                            if (id.isEmpty() || !seen.add(id)) continue;
+                            if (act.length() > 0) act.append('\n');
+                            String shortId = id.length() > 18
+                                    ? id.substring(0, 10) + "…" + id.substring(id.length() - 6) : id;
+                            act.append(shortId);
+                            if (t.amount != null) act.append("   ").append(t.amount).append(" 2X2");
+                            if (seen.size() >= 12) break;
+                        }
+                        if (seen.size() >= 12) break;
+                    }
+                    String activity = act.length() == 0 ? "No transactions yet" : act.toString();
+                    Platform.runLater(() -> activityLabel.setText(activity));
+                } catch (Exception actEx) {
+                    Platform.runLater(() ->
+                            activityLabel.setText(ApiException.userMessage(actEx)));
+                }
             } catch (Exception ex) {
                 Platform.runLater(() ->
                         activityLabel.setText(ApiException.userMessage(ex)));
