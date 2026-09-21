@@ -70,4 +70,22 @@ public class TransactionTest {
         // txid must be stable and 32 bytes
         assertEquals(64, tx.txid().length());
     }
+
+    @Test
+    public void safeNTimeBiasesIntoPastAndRespectsInputFloor() {
+        long now = 1_790_000_000L;
+        long lagged = Transaction.safeNTime(now, 0L);
+        assertEquals(now - NetworkParameters.TX_TIME_SAFETY_LAG_SECONDS, lagged);
+        // Still within Protocol V2 FutureDrift (+15s) if the client clock is up to lag seconds fast.
+        assertTrue(lagged + 15 < now || lagged <= now);
+
+        long coinTime = now - 30; // input younger than the default lag
+        assertEquals(coinTime, Transaction.safeNTime(now, coinTime));
+
+        Transaction fresh = new Transaction();
+        long wall = System.currentTimeMillis() / 1000L;
+        assertTrue("default nTime must not be in the future", fresh.nTime <= wall);
+        assertTrue("default nTime applies safety lag",
+                fresh.nTime <= wall - NetworkParameters.TX_TIME_SAFETY_LAG_SECONDS + 1);
+    }
 }

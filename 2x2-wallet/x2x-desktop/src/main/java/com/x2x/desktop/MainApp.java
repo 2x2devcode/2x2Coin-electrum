@@ -569,7 +569,9 @@ public class MainApp extends Application {
                         return;
                     }
                     if (!requirePin("Authorize payment")) return;
-                    doSend(built, useChange);
+                    // Rebuild + sign immediately before broadcast so nTime uses a fresh
+                    // FutureDrift-safe timestamp (Protocol V2 allows only +15s skew).
+                    doSend(to, amountFinal, useChange, recvIdx);
                 });
             } catch (Exception ex) {
                 Platform.runLater(() -> {
@@ -582,10 +584,10 @@ public class MainApp extends Application {
         });
     }
 
-    private void doSend(TxBuilder.Built built, int useChange) {
+    private void doSend(String to, long amountSat, int useChange, int recvIdx) {
         pool.execute(() -> {
             try {
-                String txid = wallet.broadcastSigned(built);
+                String txid = wallet.send(to, amountSat, useChange, recvIdx, useChange);
                 storage.setChangeIndex(useChange + 1);
                 persistQuiet();
                 Platform.runLater(() -> {

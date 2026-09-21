@@ -56,8 +56,23 @@ public final class NetworkParameters {
     public static final boolean TX_HAS_NTIME = true;
     public static final int TX_CURRENT_VERSION = 1;
 
+    /**
+     * Seconds to subtract from wall-clock when setting tx {@code nTime}.
+     * Protocol V2 mempool policy only allows {@code GetAdjustedTime() + 15}
+     * ({@code FutureDrift}); a slightly-fast client clock otherwise yields
+     * {@code time-too-new} → API "invalid transaction". Past timestamps are fine
+     * as long as {@code nTime >=} each spent coin's {@code nTime}.
+     */
+    public static final long TX_TIME_SAFETY_LAG_SECONDS = 120L;
+
     // ---- Fees ----
     public static final long DEFAULT_FEE_PER_KB = 10_000L; // sat/kB (overridden by /api/fee)
+
+    /**
+     * Minimum non-dust output (sat). Matches daemon {@code IsDust} at the default
+     * {@code minRelayTxFee} of 10_000 sat/kB (~5460) with a small margin.
+     */
+    public static final long MIN_NON_DUST_OUTPUT = 10_000L;
 
     // ---- REST endpoints ----
     public static final String OFFICIAL_API_BASE_URL = "https://server.2x2coin.com";

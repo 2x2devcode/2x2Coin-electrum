@@ -57,6 +57,42 @@ public class TxBuilderTest {
         assertEquals(64, b.txid().length());
     }
 
+    @Test
+    public void builtTxUsesLaggedNTimeAndAbsorbsSubDustChange() {
+        List<TxBuilder.Spendable> utxos = new ArrayList<>();
+        // 3.00015 2X2 — after sending 3 and paying a 10k fee, leftover (~5k) is below dust.
+        utxos.add(utxo("11".repeat(32), "aa".repeat(32), 0, 300_015_000L));
+        String dest = Address.p2pkhFromPublicKey(
+                Secp256k1.publicFromPrivate(Hex.decode("33".repeat(32)), true));
+        String change = Address.p2pkhFromPublicKey(
+                Secp256k1.publicFromPrivate(Hex.decode("44".repeat(32)), true));
+
+        long before = System.currentTimeMillis() / 1000L;
+        TxBuilder.Built b = TxBuilder.build(utxos, dest, 300_000_000L, 10_000L, change);
+        long after = System.currentTimeMillis() / 1000L;
+
+        assertTrue(b.tx.nTime <= after);
+        assertTrue(b.tx.nTime <= before - NetworkParameters.TX_TIME_SAFETY_LAG_SECONDS + 2);
+        assertEquals(0, b.changeSat);
+        assertEquals(1, b.tx.outputs.size());
+    }
+
+    @Test
+    public void coinNTimeFloorRaisesTxNTime() {
+        byte[] priv = Hex.decode("11".repeat(32));
+        byte[] pub = Secp256k1.publicFromPrivate(priv, true);
+        String addr = Address.p2pkhFromPublicKey(pub);
+        long recentCoin = System.currentTimeMillis() / 1000L - 10;
+        List<TxBuilder.Spendable> utxos = new ArrayList<>();
+        utxos.add(new TxBuilder.Spendable("aa".repeat(32), 0, 500_000_000L,
+                Address.p2pkhScript(addr), priv, pub, recentCoin));
+        String dest = Address.p2pkhFromPublicKey(
+                Secp256k1.publicFromPrivate(Hex.decode("33".repeat(32)), true));
+
+        TxBuilder.Built b = TxBuilder.build(utxos, dest, 100_000_000L, 10_000L, addr);
+        assertEquals(recentCoin, b.tx.nTime);
+    }
+
     @Test(expected = IllegalStateException.class)
     public void insufficientFundsThrows() {
         List<TxBuilder.Spendable> utxos = new ArrayList<>();
