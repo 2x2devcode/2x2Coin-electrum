@@ -57,6 +57,18 @@ public final class ApiException extends IOException {
         return MSG_NETWORK;
     }
 
+    public static boolean isRateLimited(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof ApiException
+                    && ((ApiException) cur).getKind() == Kind.RATE_LIMITED) {
+                return true;
+            }
+            cur = cur.getCause();
+        }
+        return false;
+    }
+
     public static ApiException fromHttpStatus(int code, boolean broadcast) {
         if (code == 429) {
             return new ApiException(Kind.RATE_LIMITED, code, MSG_RATE_LIMITED);
