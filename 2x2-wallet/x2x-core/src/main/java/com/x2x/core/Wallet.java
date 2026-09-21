@@ -225,18 +225,51 @@ public final class Wallet {
 
     public String send(String to, long amountSat, int changeIndex,
                        int highestReceiveIndex, int highestChangeIndex) throws IOException {
-        TxBuilder.Built built = createTransaction(to, amountSat, changeIndex,
-                highestReceiveIndex, highestChangeIndex);
-        return broadcastSigned(built);
+        AppLog.info("send start to=" + to + " amountSat=" + amountSat
+                + " changeIndex=" + changeIndex
+                + " recvTip=" + highestReceiveIndex + " changeTip=" + highestChangeIndex);
+        try {
+            TxBuilder.Built built = createTransaction(to, amountSat, changeIndex,
+                    highestReceiveIndex, highestChangeIndex);
+            return broadcastSigned(built);
+        } catch (IOException e) {
+            AppLog.error("send failed to=" + to + " amountSat=" + amountSat
+                    + " msg=" + ApiException.userMessage(e), e);
+            throw e;
+        }
     }
 
     /** Broadcast an already-built signed transaction (avoids a second UTXO scan). */
     public String broadcastSigned(TxBuilder.Built built) throws IOException {
-        ApiClient.BroadcastResult r = api.broadcast(built.hex());
-        if (!r.ok) {
-            throw new ApiException(ApiException.Kind.INVALID_TX, 0, ApiException.MSG_INVALID_TX);
+        String hex = built.hex();
+        AppLog.info("broadcast start txid=" + built.txid()
+                + " nTime=" + built.tx.nTime
+                + " inputs=" + built.numInputs
+                + " feeSat=" + built.feeSat
+                + " changeSat=" + built.changeSat
+                + " hexLen=" + (hex.length() / 2)
+                + " outs=" + built.tx.outputs.size());
+        for (int i = 0; i < built.tx.outputs.size(); i++) {
+            Transaction.Output o = built.tx.outputs.get(i);
+            AppLog.info("broadcast out[" + i + "] valueSat=" + o.value
+                    + " spkLen=" + (o.scriptPubKey == null ? 0 : o.scriptPubKey.length));
         }
-        return r.txid != null ? r.txid : built.txid();
+        AppLog.info("broadcast hex=" + hex);
+        try {
+            ApiClient.BroadcastResult r = api.broadcast(hex);
+            if (!r.ok) {
+                AppLog.error("broadcast result not ok txid=" + built.txid());
+                throw new ApiException(ApiException.Kind.INVALID_TX, 0, ApiException.MSG_INVALID_TX);
+            }
+            String txid = r.txid != null ? r.txid : built.txid();
+            AppLog.info("broadcast success txid=" + txid);
+            return txid;
+        } catch (IOException e) {
+            AppLog.error("broadcast failed txid=" + built.txid()
+                    + " nTime=" + built.tx.nTime
+                    + " msg=" + ApiException.userMessage(e), e);
+            throw e;
+        }
     }
 
     public String send(String to, long amountSat) throws IOException {

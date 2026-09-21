@@ -72,11 +72,14 @@ cd 2x2-wallet
 - If a signing key was ever published, **rotate the keystore**.
 - TLS SPKI pinning is enabled for official API hosts — see `DEVELOPER.md`.
 - Desktop wallet data is stored encrypted under `~/.2x2-wallet/`.
+- Diagnostic logs (send/broadcast): Windows `%LOCALAPPDATA%\2x2-Wallet\logs\wallet.log`;
+  Linux/macOS `~/.2x2-wallet/logs/wallet.log`.
 
 ## Version
 
-App version: **1.3.10** (`versionCode` 11).
+App version: **1.3.11** (`versionCode` 12).
 
 If Windows self-contained `2x2-Wallet.exe` still shows **certificate pin mismatch** after updating,
 delete the folder `%LOCALAPPDATA%\2x2-Wallet` and run the new exe again (old runtimes were
-cached under the previous app version).
+cached under the previous app version). Do **not** delete this folder if you only need logs —
+logs live in `%LOCALAPPDATA%\2x2-Wallet\logs\wallet.log` (wallet seed stays in `~/.2x2-wallet\`).
