@@ -45,6 +45,7 @@ public class ApiClientRetryTest {
         c.setPinningEnabled(false);
         c.setRateLimitBackoffMs(0);
         c.setShortRetryBackoffMs(0);
+        c.setMinRequestIntervalMs(0);
         c.setTimeoutMs(3_000);
         return c;
     }
@@ -78,7 +79,7 @@ public class ApiClientRetryTest {
     }
 
     @Test
-    public void broadcast429RetriesOnceThenFails() throws Exception {
+    public void broadcast429RetriesThenFails() throws Exception {
         server.createContext("/api/tx/broadcast", ex -> {
             hits.incrementAndGet();
             respond(ex, 429, "{\"error\":\"rate limited\"}");
@@ -91,9 +92,9 @@ public class ApiClientRetryTest {
             assertEquals(ApiException.Kind.RATE_LIMITED, e.getKind());
             assertEquals(ApiException.MSG_RATE_LIMITED, e.getUserMessage());
         }
-        // initial + 1 rate-limit retry
-        assertEquals(2, hits.get());
-        assertEquals(2, api.getRequestCount());
+        // initial + MAX_RATE_LIMIT_RETRIES (3)
+        assertEquals(4, hits.get());
+        assertEquals(4, api.getRequestCount());
     }
 
     @Test

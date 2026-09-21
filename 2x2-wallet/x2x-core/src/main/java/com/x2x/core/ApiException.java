@@ -4,6 +4,7 @@ import java.io.IOException;
 
 /**
  * Typed HTTP/API failure with a stable, user-facing message (never raw JSON bodies).
+ * All messages are English.
  */
 public final class ApiException extends IOException {
 
@@ -17,13 +18,13 @@ public final class ApiException extends IOException {
         UNKNOWN
     }
 
-    public static final String MSG_INVALID_TX = "Transação inválida";
-    public static final String MSG_RATE_LIMITED = "Demasiados pedidos. Aguarde e tente de novo.";
-    public static final String MSG_NETWORK = "Rede indisponível. Tente de novo.";
-    public static final String MSG_NOT_FOUND = "Recurso não encontrado";
-    public static final String MSG_INVALID_REQUEST = "Pedido inválido";
+    public static final String MSG_INVALID_TX = "Invalid transaction";
+    public static final String MSG_RATE_LIMITED = "Too many requests. Please wait and try again.";
+    public static final String MSG_NETWORK = "Network unavailable. Please try again.";
+    public static final String MSG_NOT_FOUND = "Resource not found";
+    public static final String MSG_INVALID_REQUEST = "Invalid request";
     public static final String MSG_PIN =
-            "Falha de segurança TLS (pin). Atualize a carteira; no Windows apague %LOCALAPPDATA%\\2x2-Wallet e volte a abrir.";
+            "TLS certificate pin mismatch. Update the wallet; on Windows delete %LOCALAPPDATA%\\2x2-Wallet and reopen.";
 
     private final Kind kind;
     private final int httpStatus;

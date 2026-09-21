@@ -170,7 +170,14 @@ public class MainActivity extends AppCompatActivity {
         Bg.run(this, () -> {
             // Probe current deposit address for indexer flag + aggregate wallet balance.
             ApiClient.Balance deposit = wallet.api().getBalance(wallet.receiveAddress(receiveIndex));
-            long bal = wallet.getBalanceSat(receiveIndex, changeIndex);
+            long bal;
+            try {
+                bal = wallet.getBalanceSat(receiveIndex, changeIndex);
+            } catch (Exception e) {
+                // Fall back to deposit /balance so rate limits cannot hide funds.
+                if (deposit.confirmedSat > 0) bal = deposit.confirmedSat;
+                else throw e;
+            }
             return new Object[] { bal, deposit.scanning };
         }, pack -> {
             long bal = (Long) pack[0];
@@ -196,14 +203,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadActivity() {
-        final int scan = wallet.scanCount(receiveIndex);
+        // Only known receive indices — full look-ahead spam triggers API 429s.
+        final int scan = Math.max(1, receiveIndex + 1);
         Bg.run(this, () -> {
             java.util.List<ApiClient.TxInfo> all = new java.util.ArrayList<>();
             java.util.Set<String> seen = new java.util.HashSet<>();
             for (int i = 0; i < scan; i++) {
-                for (ApiClient.TxInfo t : wallet.api().getTxs(wallet.receiveAddress(i))) {
-                    String id = t.txid == null ? "" : t.txid;
-                    if (!id.isEmpty() && seen.add(id)) all.add(t);
+                try {
+                    for (ApiClient.TxInfo t : wallet.api().getTxs(wallet.receiveAddress(i))) {
+                        String id = t.txid == null ? "" : t.txid;
+                        if (!id.isEmpty() && seen.add(id)) all.add(t);
+                    }
+                } catch (com.x2x.core.ApiException e) {
+                    if (e.getKind() == com.x2x.core.ApiException.Kind.RATE_LIMITED && !all.isEmpty()) {
+                        break;
+                    }
+                    throw e;
                 }
             }
             return all;
@@ -226,7 +241,7 @@ public class MainActivity extends AppCompatActivity {
             }
             swipeRefresh.setRefreshing(false);
         }, e -> {
-            tvActivity.setText("Could not load activity");
+            tvActivity.setText(com.x2x.core.ApiException.userMessage(e));
             swipeRefresh.setRefreshing(false);
         });
     }
