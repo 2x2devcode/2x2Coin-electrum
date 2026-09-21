@@ -26,6 +26,7 @@ import com.journeyapps.barcodescanner.ScanOptions;
 import com.x2x.core.Address;
 import com.x2x.core.ApiClient;
 import com.x2x.core.NetworkParameters;
+import com.x2x.core.TxBuilder;
 import com.x2x.core.Wallet;
 
 public class MainActivity extends AppCompatActivity {
@@ -208,12 +209,11 @@ public class MainActivity extends AppCompatActivity {
             java.util.List<ApiClient.TxInfo> all = new java.util.ArrayList<>();
             java.util.Set<String> seen = new java.util.HashSet<>();
             try {
-                for (ApiClient.TxInfo t : wallet.api().getTxs(deposit)) {
+                for (ApiClient.TxInfo t : wallet.api().getActivity(deposit)) {
                     String id = t.txid == null ? "" : t.txid;
                     if (!id.isEmpty() && seen.add(id)) all.add(t);
                 }
             } catch (com.x2x.core.ApiException e) {
-                // Soft-fail rate limits: empty activity is better than an error banner.
                 if (e.getKind() == com.x2x.core.ApiException.Kind.RATE_LIMITED) {
                     return all;
                 }
@@ -232,7 +232,7 @@ public class MainActivity extends AppCompatActivity {
                     String shortId = id.length() > 18
                             ? id.substring(0, 10) + "…" + id.substring(id.length() - 6) : id;
                     sb.append(shortId);
-                    if (t.amount != null) sb.append("   ").append(t.amount).append(" 2X2");
+                    if (t.amount != null) sb.append("   +").append(t.amount).append(" 2X2");
                     if (i < n - 1) sb.append('\n');
                 }
                 tvActivity.setText(sb.toString());
@@ -293,7 +293,7 @@ public class MainActivity extends AppCompatActivity {
                     .setMessage(msg)
                     .setPositiveButton("Send", (d, w) ->
                             AuthHelper.requireAuth(this, storage, "Authorize payment",
-                                    () -> doSend(to, amountFinal, useChange, recvIdx)))
+                                    () -> doSend(built, useChange)))
                     .setNegativeButton("Cancel", null)
                     .show();
         }, e -> new AlertDialog.Builder(this)
@@ -305,9 +305,9 @@ public class MainActivity extends AppCompatActivity {
                 .show());
     }
 
-    private void doSend(String to, long amountSat, int useChange, int recvIdx) {
+    private void doSend(TxBuilder.Built built, int useChange) {
         Toast.makeText(this, "Broadcasting…", Toast.LENGTH_SHORT).show();
-        Bg.run(this, () -> wallet.send(to, amountSat, useChange, recvIdx, useChange), txid -> {
+        Bg.run(this, () -> wallet.broadcastSigned(built), txid -> {
             // Rotate change address after a successful spend that may have created change.
             changeIndex = useChange + 1;
             storage.setChangeIndex(changeIndex);
@@ -321,9 +321,7 @@ public class MainActivity extends AppCompatActivity {
             refresh();
         }, e -> new AlertDialog.Builder(this)
                 .setTitle("Send failed")
-                .setMessage(com.x2x.core.ApiException.isRateLimited(e)
-                        ? "Server is busy. Wait a few seconds, then try Send again."
-                        : com.x2x.core.ApiException.userMessage(e))
+                .setMessage(com.x2x.core.ApiException.userMessage(e))
                 .setPositiveButton("OK", null)
                 .show());
     }
