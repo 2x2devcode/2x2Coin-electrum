@@ -94,4 +94,13 @@ public final class NetworkParameters {
 
     /** Block explorer / website shown in the UI. */
     public static final String WEBSITE_URL = "https://2x2coin.com";
+
+    /** Public block explorer (human-facing web UI). */
+    public static final String EXPLORER_WEB_URL = "https://explorer.2x2coin.com";
+
+    /** Deep-link to a transaction on the public explorer. */
+    public static String explorerTxUrl(String txid) {
+        if (txid == null || txid.isEmpty()) return EXPLORER_WEB_URL;
+        return EXPLORER_WEB_URL + "/tx/" + txid;
+    }
 }
