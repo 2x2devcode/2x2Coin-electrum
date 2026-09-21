@@ -134,6 +134,8 @@ public final class ApiClient {
     public static final class Utxo {
         public String txid; public long vout; public long valueSat; public byte[] scriptPubKey;
         public long height;
+        /** Parent transaction nTime when the index exposes it (0 = unknown). */
+        public long nTime;
     }
 
     public static final class BroadcastResult {
@@ -189,6 +191,7 @@ public final class ApiClient {
             x.vout = firstLong(u, "vout", "n", "outputIndex", "output_n");
             x.valueSat = parseValueToSat(u, "amountSatoshis", "valueSat", "satoshis", "value", "amount");
             x.height = firstLong(u, "height", "block_height", "confirmations");
+            x.nTime = firstLong(u, "nTime", "time", "blockTime", "timestamp");
             String spk = firstStringOrNull(u, "scriptPubKey", "script", "scriptpubkey");
             x.scriptPubKey = spk != null ? Hex.decode(spk) : Address.p2pkhScript(address);
             out.add(x);
@@ -393,7 +396,7 @@ public final class ApiClient {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.9");
+        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.10");
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");

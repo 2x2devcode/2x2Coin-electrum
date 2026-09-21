@@ -303,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
                     .setMessage(msg)
                     .setPositiveButton("Send", (d, w) ->
                             AuthHelper.requireAuth(this, storage, "Authorize payment",
-                                    () -> doSend(built, useChange)))
+                                    () -> doSend(to, amountFinal, useChange, recvIdx)))
                     .setNegativeButton("Cancel", null)
                     .show();
         }, e -> new AlertDialog.Builder(this)
@@ -315,9 +315,10 @@ public class MainActivity extends AppCompatActivity {
                 .show());
     }
 
-    private void doSend(TxBuilder.Built built, int useChange) {
+    private void doSend(String to, long amountSat, int useChange, int recvIdx) {
         Toast.makeText(this, "Broadcasting…", Toast.LENGTH_SHORT).show();
-        Bg.run(this, () -> wallet.broadcastSigned(built), txid -> {
+        // Rebuild + sign immediately before broadcast so nTime is FutureDrift-safe.
+        Bg.run(this, () -> wallet.send(to, amountSat, useChange, recvIdx, useChange), txid -> {
             // Rotate change address after a successful spend that may have created change.
             changeIndex = useChange + 1;
             storage.setChangeIndex(changeIndex);

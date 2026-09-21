@@ -8,7 +8,7 @@ import java.util.List;
 public final class TxBuilder {
 
     /** ~dust threshold in satoshis; change below this is dropped into the fee. */
-    public static final long DUST = 1_000L;
+    public static final long DUST = NetworkParameters.MIN_NON_DUST_OUTPUT;
 
     private TxBuilder() {}
 
@@ -20,11 +20,19 @@ public final class TxBuilder {
         public final byte[] scriptPubKey;
         public final byte[] priv;
         public final byte[] pub;
+        /** Parent tx {@code nTime} when known (0 = unknown). */
+        public final long coinNTime;
 
         public Spendable(String txid, long vout, long valueSat, byte[] scriptPubKey,
                          byte[] priv, byte[] pub) {
+            this(txid, vout, valueSat, scriptPubKey, priv, pub, 0L);
+        }
+
+        public Spendable(String txid, long vout, long valueSat, byte[] scriptPubKey,
+                         byte[] priv, byte[] pub, long coinNTime) {
             this.txid = txid; this.vout = vout; this.valueSat = valueSat;
             this.scriptPubKey = scriptPubKey; this.priv = priv; this.pub = pub;
+            this.coinNTime = coinNTime;
         }
     }
 
@@ -86,7 +94,14 @@ public final class TxBuilder {
             change = 0;
         }
 
+        long minCoinNTime = 0L;
+        for (Spendable s : chosen) {
+            if (s.coinNTime > minCoinNTime) minCoinNTime = s.coinNTime;
+        }
+
         Transaction tx = new Transaction();
+        // Set nTime immediately before signing (participates in sighash + mempool FutureDrift).
+        tx.nTime = Transaction.safeNTime(System.currentTimeMillis() / 1000L, minCoinNTime);
         for (Spendable s : chosen) tx.addInput(s.txid, s.vout, s.scriptPubKey, s.valueSat);
         tx.addOutputToAddress(amountSat, toAddress);
         if (withChange) tx.addOutputToAddress(change, changeAddress);

@@ -25,7 +25,22 @@ public final class Transaction {
     public final List<Output> outputs = new ArrayList<>();
 
     public Transaction() {
-        this.nTime = System.currentTimeMillis() / 1000L;
+        this.nTime = safeNTime();
+    }
+
+    /**
+     * Mempool-safe transaction timestamp: wall clock minus
+     * {@link NetworkParameters#TX_TIME_SAFETY_LAG_SECONDS}, floored at
+     * {@code minInputNTime} so we never violate {@code bad-txns-time-earlier-than-input}.
+     */
+    public static long safeNTime() {
+        return safeNTime(System.currentTimeMillis() / 1000L, 0L);
+    }
+
+    public static long safeNTime(long nowSeconds, long minInputNTime) {
+        long n = nowSeconds - NetworkParameters.TX_TIME_SAFETY_LAG_SECONDS;
+        if (n < minInputNTime) n = minInputNTime;
+        return Math.max(0L, n);
     }
 
     // ---- model ----

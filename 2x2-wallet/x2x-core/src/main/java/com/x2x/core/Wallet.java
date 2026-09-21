@@ -115,7 +115,7 @@ public final class Wallet {
                 List<ApiClient.Utxo> utxos = api.getUtxos(k.address);
                 for (ApiClient.Utxo u : utxos) {
                     out.add(new TxBuilder.Spendable(u.txid, u.vout, u.valueSat, u.scriptPubKey,
-                            k.priv, k.pub));
+                            k.priv, k.pub, u.nTime));
                 }
             } catch (ApiException e) {
                 if (e.getKind() == ApiException.Kind.PIN_MISMATCH) throw e;

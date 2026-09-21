@@ -186,7 +186,8 @@ public class ApiClientRetryTest {
                 + "\"txid\":\"874218e55315afd7951f743accd0e5a948e3d1af483eaf41a18c1f0e2c37082e\","
                 + "\"vout\":1,"
                 + "\"amountSatoshis\":1000000000,"
-                + "\"confirmations\":5605"
+                + "\"confirmations\":5605,"
+                + "\"nTime\":1769900000"
                 + "}]}";
         server.createContext("/api/address/2aEv33T2jg7iczvGtoVvvX2ERz1ZJDk7m2/utxos",
                 ex -> respond(ex, 200, body));
@@ -198,6 +199,7 @@ public class ApiClientRetryTest {
                 "874218e55315afd7951f743accd0e5a948e3d1af483eaf41a18c1f0e2c37082e",
                 utxos.get(0).txid);
         assertEquals(1L, utxos.get(0).vout);
+        assertEquals(1_769_900_000L, utxos.get(0).nTime);
     }
 
     @Test
