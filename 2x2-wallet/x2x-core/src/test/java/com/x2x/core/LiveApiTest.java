@@ -61,10 +61,9 @@ public class LiveApiTest {
         } catch (ApiException e) {
             System.out.println("[live] broadcast(garbage): kind=" + e.getKind()
                     + " status=" + e.getHttpStatus() + " msg=" + e.getUserMessage());
-            // Prefer INVALID_TX (400). If the daemon/upstream is down the API may
-            // return 502 — still a typed failure, never a silent success.
-            assertTrue(e.getKind() == ApiException.Kind.INVALID_TX
-                    || e.getKind() == ApiException.Kind.NETWORK);
+            // With JSON field "hex", garbage reaches the daemon as HTTP 400 INVALID_TX.
+            assertEquals(ApiException.Kind.INVALID_TX, e.getKind());
+            assertEquals(400, e.getHttpStatus());
             assertTrue(!e.getUserMessage().contains("{"));
         }
     }

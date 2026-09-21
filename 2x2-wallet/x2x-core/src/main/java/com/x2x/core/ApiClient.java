@@ -230,10 +230,13 @@ public final class ApiClient {
         return fromUtxos;
     }
 
-    /** POST a signed raw transaction (hex). Field name confirmed against the live server: "rawTx". */
+    /**
+     * POST a signed raw transaction (hex).
+     * Live server accepts JSON field {@code hex} (field {@code rawTx} returns 502 upstream).
+     */
     public BroadcastResult broadcast(String rawTxHex) throws IOException {
         JsonObject body = new JsonObject();
-        body.addProperty("rawTx", rawTxHex);
+        body.addProperty("hex", rawTxHex);
         JsonElement resEl = postJson("/api/tx/broadcast", body.toString(), true);
         JsonObject res = resEl.getAsJsonObject();
         BroadcastResult r = new BroadcastResult();
@@ -390,7 +393,7 @@ public final class ApiClient {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.8");
+        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.9");
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");

@@ -9,6 +9,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ScrollPane;
@@ -75,7 +76,7 @@ public class MainApp extends Application {
     private Label syncLabel;
     private Label feeLabel;
     private Label addressLabel;
-    private Label activityLabel;
+    private VBox activityBox;
     private ImageView qrView;
     private TextField toField;
     private TextField amountField;
@@ -299,8 +300,8 @@ public class MainApp extends Application {
         ticker.setTextFill(Color.web(GREEN));
         syncLabel = mutedLabel("");
         syncLabel.setVisible(false);
-        activityLabel = mutedLabel("Loading…");
-        activityLabel.setWrapText(true);
+        activityBox = new VBox(6);
+        activityBox.getChildren().add(mutedLabel("Loading…"));
 
         Button refresh = secondaryButton("Refresh");
         refresh.setOnAction(e -> refresh());
@@ -309,7 +310,7 @@ public class MainApp extends Application {
                 mutedLabel("WALLET BALANCE (all addresses)"),
                 balanceLabel, ticker, syncLabel));
         bal.setAlignment(Pos.CENTER);
-        VBox act = card(new VBox(8, sectionTitle("Activity"), activityLabel));
+        VBox act = card(new VBox(8, sectionTitle("Activity"), activityBox));
 
         VBox box = new VBox(16,
                 row(titleLabel("2X2 Wallet"), statusLabel),
@@ -427,7 +428,7 @@ public class MainApp extends Application {
                 Platform.runLater(() -> {
                     statusLabel.setText("offline");
                     statusLabel.setTextFill(Color.web("#E5484D"));
-                    activityLabel.setText("No transactions yet");
+                    setActivityEmpty();
                 });
                 return;
             }
@@ -479,27 +480,54 @@ public class MainApp extends Application {
 
                 // Activity: /txs is often empty on the live index — fall back to UTXOs as received.
                 try {
-                    StringBuilder act = new StringBuilder();
+                    java.util.List<ApiClient.TxInfo> items = new java.util.ArrayList<>();
                     java.util.Set<String> seen = new java.util.HashSet<>();
                     for (ApiClient.TxInfo t : wallet.api().getActivity(depositAddr)) {
                         String id = t.txid == null ? "" : t.txid;
                         if (id.isEmpty() || !seen.add(id)) continue;
-                        if (act.length() > 0) act.append('\n');
-                        String shortId = id.length() > 18
-                                ? id.substring(0, 10) + "…" + id.substring(id.length() - 6) : id;
-                        act.append(shortId);
-                        if (t.amount != null) act.append("   +").append(t.amount).append(" 2X2");
-                        if (seen.size() >= 12) break;
+                        items.add(t);
+                        if (items.size() >= 12) break;
                     }
-                    String activity = act.length() == 0 ? "No transactions yet" : act.toString();
-                    Platform.runLater(() -> activityLabel.setText(activity));
+                    Platform.runLater(() -> setActivityItems(items));
                 } catch (Exception actEx) {
-                    Platform.runLater(() -> activityLabel.setText("No transactions yet"));
+                    Platform.runLater(this::setActivityEmpty);
                 }
             } catch (Exception ex) {
-                Platform.runLater(() -> activityLabel.setText("No transactions yet"));
+                Platform.runLater(this::setActivityEmpty);
             }
         });
+    }
+
+    private void setActivityEmpty() {
+        if (activityBox == null) return;
+        activityBox.getChildren().setAll(mutedLabel("No transactions yet"));
+    }
+
+    private void setActivityItems(java.util.List<ApiClient.TxInfo> items) {
+        if (activityBox == null) return;
+        if (items == null || items.isEmpty()) {
+            setActivityEmpty();
+            return;
+        }
+        java.util.List<javafx.scene.Node> rows = new java.util.ArrayList<>();
+        for (ApiClient.TxInfo t : items) {
+            String id = t.txid == null ? "" : t.txid;
+            String shortId = id.length() > 18
+                    ? id.substring(0, 10) + "…" + id.substring(id.length() - 6) : id;
+            StringBuilder line = new StringBuilder(shortId);
+            if (t.amount != null) line.append("   +").append(t.amount).append(" 2X2");
+            Label text = mutedLabel(line.toString());
+            text.setWrapText(true);
+            HBox.setHgrow(text, Priority.ALWAYS);
+            Hyperlink link = new Hyperlink("Explorer");
+            link.setTextFill(Color.web(GREEN));
+            final String txid = id;
+            link.setOnAction(e -> getHostServices().showDocument(NetworkParameters.explorerTxUrl(txid)));
+            HBox row = new HBox(10, text, link);
+            row.setAlignment(Pos.CENTER_LEFT);
+            rows.add(row);
+        }
+        activityBox.getChildren().setAll(rows);
     }
 
     private void confirmSend() {

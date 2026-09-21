@@ -230,4 +230,31 @@ public class ApiClientRetryTest {
         }
         assertEquals(3, hits.get());
     }
+
+    @Test
+    public void broadcastPostsHexField() throws Exception {
+        final String[] seenBody = { null };
+        server.createContext("/api/tx/broadcast", ex -> {
+            hits.incrementAndGet();
+            byte[] buf = ex.getRequestBody().readAllBytes();
+            seenBody[0] = new String(buf, StandardCharsets.UTF_8);
+            respond(ex, 400, "{\"error\":\"invalid transaction\"}");
+        });
+        try {
+            client().broadcast("deadbeef");
+            fail("expected ApiException");
+        } catch (ApiException e) {
+            assertEquals(ApiException.Kind.INVALID_TX, e.getKind());
+        }
+        assertTrue(seenBody[0] != null && seenBody[0].contains("\"hex\""));
+        assertTrue(!seenBody[0].contains("\"rawTx\""));
+        assertEquals(1, hits.get());
+    }
+
+    @Test
+    public void explorerTxUrlUsesPublicExplorer() {
+        assertEquals(
+                "https://explorer.2x2coin.com/tx/abc",
+                NetworkParameters.explorerTxUrl("abc"));
+    }
 }

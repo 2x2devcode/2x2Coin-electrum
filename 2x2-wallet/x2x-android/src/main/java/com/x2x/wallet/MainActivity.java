@@ -7,6 +7,10 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.method.LinkMovementMethod;
+import android.text.style.URLSpan;
 import android.text.InputType;
 import android.view.View;
 import android.widget.EditText;
@@ -224,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
             if (list.isEmpty()) {
                 tvActivity.setText("No transactions yet");
             } else {
-                StringBuilder sb = new StringBuilder();
+                SpannableStringBuilder sb = new SpannableStringBuilder();
                 int n = Math.min(list.size(), 12);
                 for (int i = 0; i < n; i++) {
                     ApiClient.TxInfo t = list.get(i);
@@ -233,9 +237,15 @@ public class MainActivity extends AppCompatActivity {
                             ? id.substring(0, 10) + "…" + id.substring(id.length() - 6) : id;
                     sb.append(shortId);
                     if (t.amount != null) sb.append("   +").append(t.amount).append(" 2X2");
+                    sb.append("  ");
+                    int linkStart = sb.length();
+                    sb.append("Explorer");
+                    sb.setSpan(new URLSpan(NetworkParameters.explorerTxUrl(id)),
+                            linkStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     if (i < n - 1) sb.append('\n');
                 }
-                tvActivity.setText(sb.toString());
+                tvActivity.setText(sb);
+                tvActivity.setMovementMethod(LinkMovementMethod.getInstance());
             }
             swipeRefresh.setRefreshing(false);
         }, e -> {
