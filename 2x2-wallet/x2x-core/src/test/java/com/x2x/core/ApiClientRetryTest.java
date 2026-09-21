@@ -201,12 +201,33 @@ public class ApiClientRetryTest {
     }
 
     @Test
-    public void getUtxosStillAcceptsValueSatFallback() throws Exception {
+    public void getActivityFallsBackToUtxosWhenTxsEmpty() throws Exception {
         String addr = "2aEv33T2jg7iczvGtoVvvX2ERz1ZJDk7m2";
-        String body = "{\"utxos\":[{\"txid\":\"aa\",\"vout\":0,\"valueSat\":500000000}]}";
-        server.createContext("/api/address/" + addr + "/utxos", ex -> respond(ex, 200, body));
-        List<ApiClient.Utxo> utxos = client().getUtxos(addr);
-        assertEquals(1, utxos.size());
-        assertEquals(500_000_000L, utxos.get(0).valueSat);
+        server.createContext("/api/address/" + addr + "/txs",
+                ex -> respond(ex, 200, "{\"transactions\":[]}"));
+        server.createContext("/api/address/" + addr + "/utxos",
+                ex -> respond(ex, 200,
+                        "{\"utxos\":[{\"txid\":\"874218e55315afd7951f743accd0e5a948e3d1af483eaf41a18c1f0e2c37082e\","
+                                + "\"vout\":1,\"amountSatoshis\":1000000000,\"confirmations\":7488}]}"));
+        List<ApiClient.TxInfo> act = client().getActivity(addr);
+        assertEquals(1, act.size());
+        assertEquals("874218e55315afd7951f743accd0e5a948e3d1af483eaf41a18c1f0e2c37082e", act.get(0).txid);
+        assertEquals("10.00000000", act.get(0).amount);
+    }
+
+    @Test
+    public void broadcast502UsesBroadcastMessage() throws Exception {
+        server.createContext("/api/tx/broadcast", ex -> {
+            hits.incrementAndGet();
+            respond(ex, 502, "{\"error\":\"upstream unavailable\"}");
+        });
+        try {
+            client().broadcast("00");
+            fail("expected ApiException");
+        } catch (ApiException e) {
+            assertEquals(ApiException.Kind.NETWORK, e.getKind());
+            assertEquals(ApiException.MSG_BROADCAST, e.getUserMessage());
+        }
+        assertEquals(3, hits.get());
     }
 }

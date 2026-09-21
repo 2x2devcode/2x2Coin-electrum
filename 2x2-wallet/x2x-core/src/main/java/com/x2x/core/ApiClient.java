@@ -211,6 +211,25 @@ public final class ApiClient {
         return out;
     }
 
+    /**
+     * Activity feed for an address. The live {@code /txs} index is often empty even when
+     * UTXOs exist, so we fall back to unspent outputs as received credits.
+     */
+    public List<TxInfo> getActivity(String address) throws IOException {
+        List<TxInfo> txs = getTxs(address);
+        if (!txs.isEmpty()) return txs;
+        List<TxInfo> fromUtxos = new ArrayList<>();
+        for (Utxo u : getUtxos(address)) {
+            if (u.txid == null || u.txid.isEmpty() || u.valueSat <= 0) continue;
+            TxInfo t = new TxInfo();
+            t.txid = u.txid;
+            t.amount = Amounts.satToCoins(u.valueSat);
+            t.confirmations = u.height;
+            fromUtxos.add(t);
+        }
+        return fromUtxos;
+    }
+
     /** POST a signed raw transaction (hex). Field name confirmed against the live server: "rawTx". */
     public BroadcastResult broadcast(String rawTxHex) throws IOException {
         JsonObject body = new JsonObject();
@@ -275,7 +294,9 @@ public final class ApiClient {
                             lastClient = ApiException.fromHttpStatus(code, broadcast);
                             break; // try next base
                         }
-                        sleepQuiet(shortRetryBackoffMs);
+                        // Broadcast upstream outages need a longer cool-down than GETs.
+                        sleepQuiet(broadcast ? Math.max(shortRetryBackoffMs, 1_500L)
+                                : shortRetryBackoffMs);
                         continue;
                     }
 
@@ -369,7 +390,7 @@ public final class ApiClient {
         c.setConnectTimeout(timeoutMs);
         c.setReadTimeout(timeoutMs);
         c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.7");
+        c.setRequestProperty("User-Agent", "2x2-wallet/1.3.8");
         if (body != null) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");

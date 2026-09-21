@@ -34,6 +34,7 @@ import com.x2x.core.ApiClient;
 import com.x2x.core.ApiException;
 import com.x2x.core.Bip39;
 import com.x2x.core.NetworkParameters;
+import com.x2x.core.TxBuilder;
 import com.x2x.core.Wallet;
 
 import java.util.ArrayList;
@@ -476,18 +477,18 @@ public class MainApp extends Application {
                 final long balFinal = bal;
                 Platform.runLater(() -> balanceLabel.setText(Amounts.satToCoins(balFinal)));
 
-                // Activity: deposit address only. Soft-fail so rate limits never appear here.
+                // Activity: /txs is often empty on the live index — fall back to UTXOs as received.
                 try {
                     StringBuilder act = new StringBuilder();
                     java.util.Set<String> seen = new java.util.HashSet<>();
-                    for (ApiClient.TxInfo t : wallet.api().getTxs(depositAddr)) {
+                    for (ApiClient.TxInfo t : wallet.api().getActivity(depositAddr)) {
                         String id = t.txid == null ? "" : t.txid;
                         if (id.isEmpty() || !seen.add(id)) continue;
                         if (act.length() > 0) act.append('\n');
                         String shortId = id.length() > 18
                                 ? id.substring(0, 10) + "…" + id.substring(id.length() - 6) : id;
                         act.append(shortId);
-                        if (t.amount != null) act.append("   ").append(t.amount).append(" 2X2");
+                        if (t.amount != null) act.append("   +").append(t.amount).append(" 2X2");
                         if (seen.size() >= 12) break;
                     }
                     String activity = act.length() == 0 ? "No transactions yet" : act.toString();
@@ -540,7 +541,7 @@ public class MainApp extends Application {
                         return;
                     }
                     if (!requirePin("Authorize payment")) return;
-                    doSend(to, amountFinal, useChange, recvIdx);
+                    doSend(built, useChange);
                 });
             } catch (Exception ex) {
                 Platform.runLater(() -> {
@@ -553,10 +554,10 @@ public class MainApp extends Application {
         });
     }
 
-    private void doSend(String to, long amountSat, int useChange, int recvIdx) {
+    private void doSend(TxBuilder.Built built, int useChange) {
         pool.execute(() -> {
             try {
-                String txid = wallet.send(to, amountSat, useChange, recvIdx, useChange);
+                String txid = wallet.broadcastSigned(built);
                 storage.setChangeIndex(useChange + 1);
                 persistQuiet();
                 Platform.runLater(() -> {

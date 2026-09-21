@@ -21,6 +21,8 @@ public final class ApiException extends IOException {
     public static final String MSG_INVALID_TX = "Invalid transaction";
     public static final String MSG_RATE_LIMITED = "Too many requests. Please wait and try again.";
     public static final String MSG_NETWORK = "Network unavailable. Please try again.";
+    public static final String MSG_BROADCAST =
+            "Could not broadcast: the network node is temporarily unavailable. Please try again later.";
     public static final String MSG_NOT_FOUND = "Resource not found";
     public static final String MSG_INVALID_REQUEST = "Invalid request";
     public static final String MSG_PIN =
@@ -85,7 +87,7 @@ public final class ApiException extends IOException {
             }
         }
         if (code >= 500 || code == 408) {
-            return new ApiException(Kind.NETWORK, code, MSG_NETWORK);
+            return new ApiException(Kind.NETWORK, code, broadcast ? MSG_BROADCAST : MSG_NETWORK);
         }
         if (code >= 400) {
             return new ApiException(Kind.INVALID_REQUEST, code, MSG_INVALID_REQUEST);

@@ -227,6 +227,11 @@ public final class Wallet {
                        int highestReceiveIndex, int highestChangeIndex) throws IOException {
         TxBuilder.Built built = createTransaction(to, amountSat, changeIndex,
                 highestReceiveIndex, highestChangeIndex);
+        return broadcastSigned(built);
+    }
+
+    /** Broadcast an already-built signed transaction (avoids a second UTXO scan). */
+    public String broadcastSigned(TxBuilder.Built built) throws IOException {
         ApiClient.BroadcastResult r = api.broadcast(built.hex());
         if (!r.ok) {
             throw new ApiException(ApiException.Kind.INVALID_TX, 0, ApiException.MSG_INVALID_TX);
