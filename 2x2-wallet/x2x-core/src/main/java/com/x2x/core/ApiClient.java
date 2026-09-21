@@ -234,12 +234,18 @@ public final class ApiClient {
     }
 
     /**
-     * POST a signed raw transaction (hex).
-     * Live server accepts JSON field {@code hex} (field {@code rawTx} returns 502 upstream).
+     * POST a signed raw transaction (hex encoding).
+     *
+     * <p>The live gateway must receive JSON field {@code rawTx}. Field {@code hex} is validated
+     * by a Bitcoin-style decoder that does not understand Peercoin {@code nTime}, so valid 2x2
+     * transactions are rejected as {@code invalid transaction}. Garbage {@code rawTx} yields
+     * HTTP 502 from the upstream node (mapped to a broadcast/network error).
      */
     public BroadcastResult broadcast(String rawTxHex) throws IOException {
         JsonObject body = new JsonObject();
-        body.addProperty("hex", rawTxHex);
+        body.addProperty("rawTx", rawTxHex);
+        AppLog.info("broadcast POST field=rawTx hexLen="
+                + (rawTxHex == null ? 0 : rawTxHex.length() / 2));
         JsonElement resEl = postJson("/api/tx/broadcast", body.toString(), true);
         JsonObject res = resEl.getAsJsonObject();
         BroadcastResult r = new BroadcastResult();

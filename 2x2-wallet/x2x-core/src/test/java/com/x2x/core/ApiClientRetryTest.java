@@ -234,22 +234,18 @@ public class ApiClientRetryTest {
     }
 
     @Test
-    public void broadcastPostsHexField() throws Exception {
+    public void broadcastPostsRawTxField() throws Exception {
         final String[] seenBody = { null };
         server.createContext("/api/tx/broadcast", ex -> {
             hits.incrementAndGet();
             byte[] buf = ex.getRequestBody().readAllBytes();
             seenBody[0] = new String(buf, StandardCharsets.UTF_8);
-            respond(ex, 400, "{\"error\":\"invalid transaction\"}");
+            respond(ex, 200, "{\"txid\":\"" + "aa".repeat(32) + "\"}");
         });
-        try {
-            client().broadcast("deadbeef");
-            fail("expected ApiException");
-        } catch (ApiException e) {
-            assertEquals(ApiException.Kind.INVALID_TX, e.getKind());
-        }
-        assertTrue(seenBody[0] != null && seenBody[0].contains("\"hex\""));
-        assertTrue(!seenBody[0].contains("\"rawTx\""));
+        ApiClient.BroadcastResult r = client().broadcast("deadbeef");
+        assertTrue(r.ok);
+        assertTrue(seenBody[0] != null && seenBody[0].contains("\"rawTx\""));
+        assertTrue("must not use Bitcoin-style hex field", !seenBody[0].contains("\"hex\""));
         assertEquals(1, hits.get());
     }
 

@@ -22,7 +22,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public final class AppLog {
 
-    public static final String APP_VERSION = "1.3.11";
+    public static final String APP_VERSION = "1.3.12";
     private static final long MAX_BYTES = 2_000_000L; // rotate when larger
     private static final DateTimeFormatter TS =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);

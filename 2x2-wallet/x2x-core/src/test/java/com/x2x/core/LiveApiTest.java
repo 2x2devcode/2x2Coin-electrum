@@ -61,9 +61,9 @@ public class LiveApiTest {
         } catch (ApiException e) {
             System.out.println("[live] broadcast(garbage): kind=" + e.getKind()
                     + " status=" + e.getHttpStatus() + " msg=" + e.getUserMessage());
-            // With JSON field "hex", garbage reaches the daemon as HTTP 400 INVALID_TX.
-            assertEquals(ApiException.Kind.INVALID_TX, e.getKind());
-            assertEquals(400, e.getHttpStatus());
+            // Field "rawTx" is forwarded to the daemon; garbage yields HTTP 502 upstream.
+            assertEquals(ApiException.Kind.NETWORK, e.getKind());
+            assertEquals(502, e.getHttpStatus());
             assertTrue(!e.getUserMessage().contains("{"));
         }
     }
