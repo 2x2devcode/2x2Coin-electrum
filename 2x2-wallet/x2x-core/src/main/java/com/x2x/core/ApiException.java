@@ -22,7 +22,7 @@ public final class ApiException extends IOException {
     public static final String MSG_RATE_LIMITED = "Too many requests. Please wait and try again.";
     public static final String MSG_NETWORK = "Network unavailable. Please try again.";
     public static final String MSG_BROADCAST =
-            "Could not broadcast: the network node is temporarily unavailable. Please try again later.";
+            "Could not broadcast: the network node is temporarily unavailable. Wait a minute and try again — your coins were not sent.";
     public static final String MSG_NOT_FOUND = "Resource not found";
     public static final String MSG_INVALID_REQUEST = "Invalid request";
     public static final String MSG_PIN =

@@ -480,17 +480,13 @@ public class MainApp extends Application {
                 final long balFinal = bal;
                 Platform.runLater(() -> balanceLabel.setText(Amounts.satToCoins(balFinal)));
 
-                // Activity: /txs is often empty on the live index — fall back to UTXOs as received.
+                // Activity across receive + change (deposit alone goes empty after first spend).
                 try {
-                    java.util.List<ApiClient.TxInfo> items = new java.util.ArrayList<>();
-                    java.util.Set<String> seen = new java.util.HashSet<>();
-                    for (ApiClient.TxInfo t : wallet.api().getActivity(depositAddr)) {
-                        String id = t.txid == null ? "" : t.txid;
-                        if (id.isEmpty() || !seen.add(id)) continue;
-                        items.add(t);
-                        if (items.size() >= 12) break;
-                    }
-                    Platform.runLater(() -> setActivityItems(items));
+                    java.util.List<ApiClient.TxInfo> items =
+                            wallet.listActivity(recvIdx, changeIdx);
+                    if (items.size() > 12) items = items.subList(0, 12);
+                    final java.util.List<ApiClient.TxInfo> show = items;
+                    Platform.runLater(() -> setActivityItems(show));
                 } catch (Exception actEx) {
                     Platform.runLater(this::setActivityEmpty);
                 }

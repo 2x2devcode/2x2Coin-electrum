@@ -213,20 +213,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadActivity() {
-        final String deposit = wallet.receiveAddress(receiveIndex);
+        final int recvIdx = receiveIndex;
+        final int chgIdx = changeIndex;
         Bg.run(this, () -> {
-            java.util.List<ApiClient.TxInfo> all = new java.util.ArrayList<>();
-            java.util.Set<String> seen = new java.util.HashSet<>();
-            try {
-                for (ApiClient.TxInfo t : wallet.api().getActivity(deposit)) {
-                    String id = t.txid == null ? "" : t.txid;
-                    if (!id.isEmpty() && seen.add(id)) all.add(t);
-                }
-            } catch (com.x2x.core.ApiException e) {
-                if (e.getKind() == com.x2x.core.ApiException.Kind.RATE_LIMITED) {
-                    return all;
-                }
-                throw e;
+            java.util.List<ApiClient.TxInfo> all = wallet.listActivity(recvIdx, chgIdx);
+            if (all.size() > 12) {
+                return new java.util.ArrayList<>(all.subList(0, 12));
             }
             return all;
         }, list -> {
@@ -234,7 +226,7 @@ public class MainActivity extends AppCompatActivity {
                 tvActivity.setText("No transactions yet");
             } else {
                 SpannableStringBuilder sb = new SpannableStringBuilder();
-                int n = Math.min(list.size(), 12);
+                int n = list.size();
                 for (int i = 0; i < n; i++) {
                     ApiClient.TxInfo t = list.get(i);
                     String id = t.txid == null ? "" : t.txid;
@@ -254,7 +246,9 @@ public class MainActivity extends AppCompatActivity {
             }
             swipeRefresh.setRefreshing(false);
         }, e -> {
-            tvActivity.setText("No transactions yet");
+            tvActivity.setText(com.x2x.core.ApiException.isRateLimited(e)
+                    ? "Activity temporarily unavailable (rate limited)"
+                    : "Could not load activity");
             swipeRefresh.setRefreshing(false);
         });
     }
