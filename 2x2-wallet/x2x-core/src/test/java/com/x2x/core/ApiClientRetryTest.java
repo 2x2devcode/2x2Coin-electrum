@@ -45,6 +45,7 @@ public class ApiClientRetryTest {
         c.setPinningEnabled(false);
         c.setRateLimitBackoffMs(0);
         c.setShortRetryBackoffMs(0);
+        c.setBroadcastRetryBackoffMs(0);
         c.setMinRequestIntervalMs(0);
         c.setTimeoutMs(3_000);
         return c;
@@ -230,7 +231,7 @@ public class ApiClientRetryTest {
             assertEquals(ApiException.Kind.NETWORK, e.getKind());
             assertEquals(ApiException.MSG_BROADCAST, e.getUserMessage());
         }
-        assertEquals(3, hits.get());
+        assertEquals(5, hits.get());
     }
 
     @Test

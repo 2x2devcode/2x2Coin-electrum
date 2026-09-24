@@ -2,7 +2,9 @@ package com.x2x.core;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * High-level 2x2 HD wallet: derives keys/addresses, queries balances and UTXOs from the
@@ -191,6 +193,41 @@ public final class Wallet {
         }
         if (total == 0 && last != null && failures > 0) throw last;
         return total;
+    }
+
+    /**
+     * Activity across known receive + change addresses. The deposit address alone goes empty
+     * after the first spend (funds sit on change); {@code /txs} is often empty so we use
+     * {@link ApiClient#getActivity(String)} (UTXO fallback) per address.
+     */
+    public List<ApiClient.TxInfo> listActivity(int highestReceiveIndex, int highestChangeIndex)
+            throws IOException {
+        List<ApiClient.TxInfo> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        IOException last = null;
+        for (int c = 0; c < 2; c++) {
+            int n = Math.max(0, c == 0 ? highestReceiveIndex : highestChangeIndex) + 1;
+            for (int i = 0; i < n; i++) {
+                try {
+                    for (ApiClient.TxInfo t : api.getActivity(key(c, i).address)) {
+                        String id = t.txid == null ? "" : t.txid;
+                        if (id.isEmpty() || !seen.add(id)) continue;
+                        out.add(t);
+                    }
+                } catch (ApiException e) {
+                    if (e.getKind() == ApiException.Kind.PIN_MISMATCH) throw e;
+                    if (e.getKind() == ApiException.Kind.RATE_LIMITED) {
+                        if (!out.isEmpty()) return out;
+                        throw e;
+                    }
+                    last = e;
+                } catch (IOException e) {
+                    last = e;
+                }
+            }
+        }
+        if (out.isEmpty() && last != null) throw last;
+        return out;
     }
 
     public long feePerKb() throws IOException { return api.getFeePerKb(); }

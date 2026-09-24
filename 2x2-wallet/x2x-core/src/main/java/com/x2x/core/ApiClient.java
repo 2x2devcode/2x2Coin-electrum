@@ -34,16 +34,20 @@ import com.google.gson.JsonParser;
  * <ul>
  *   <li>400 / 404 / 413 — never retry (especially {@code POST /api/tx/broadcast})</li>
  *   <li>429 — backoff ({@code Retry-After} or ~2.5s), at most one extra attempt</li>
- *   <li>5xx / timeout — up to 3 short attempts per host, then failover base URL</li>
+ *   <li>5xx / timeout — up to 3 short attempts per host (5 with longer backoff for broadcast),
+ *       then failover base URL</li>
  * </ul>
  */
 public final class ApiClient {
 
     private static final int MAX_SERVER_ATTEMPTS = 3;
+    /** Extra attempts for broadcast 502/upstream outages (total tries = this). */
+    private static final int MAX_BROADCAST_SERVER_ATTEMPTS = 5;
     /** Extra attempts after the first 429 (total tries = 1 + this). */
     private static final int MAX_RATE_LIMIT_RETRIES = 3;
     private static final long DEFAULT_RATE_LIMIT_BACKOFF_MS = 2_500L;
     private static final long SHORT_RETRY_BACKOFF_MS = 200L;
+    private static final long BROADCAST_RETRY_BACKOFF_MS = 3_000L;
     /** Minimum spacing between HTTP calls to reduce 429s during wallet scans. */
     private static final long DEFAULT_MIN_REQUEST_INTERVAL_MS = 150L;
 
@@ -58,6 +62,7 @@ public final class ApiClient {
     private boolean pinningEnabled = true;
     private long rateLimitBackoffMs = DEFAULT_RATE_LIMIT_BACKOFF_MS;
     private long shortRetryBackoffMs = SHORT_RETRY_BACKOFF_MS;
+    private long broadcastRetryBackoffMs = BROADCAST_RETRY_BACKOFF_MS;
     private long minRequestIntervalMs = DEFAULT_MIN_REQUEST_INTERVAL_MS;
     private final Object requestPaceLock = new Object();
     private long lastRequestAtMs = 0L;
@@ -108,6 +113,11 @@ public final class ApiClient {
     /** Test-only: shorten 5xx/timeout backoff. */
     public void setShortRetryBackoffMs(long ms) {
         this.shortRetryBackoffMs = Math.max(0L, ms);
+    }
+
+    /** Test-only: shorten broadcast 502 backoff. */
+    public void setBroadcastRetryBackoffMs(long ms) {
+        this.broadcastRetryBackoffMs = Math.max(0L, ms);
     }
 
     /** Test-only: disable or shorten inter-request pacing. */
@@ -219,8 +229,20 @@ public final class ApiClient {
      * UTXOs exist, so we fall back to unspent outputs as received credits.
      */
     public List<TxInfo> getActivity(String address) throws IOException {
-        List<TxInfo> txs = getTxs(address);
-        if (!txs.isEmpty()) return txs;
+        try {
+            List<TxInfo> txs = getTxs(address);
+            if (!txs.isEmpty()) return txs;
+        } catch (ApiException e) {
+            if (e.getKind() == ApiException.Kind.RATE_LIMITED
+                    || e.getKind() == ApiException.Kind.PIN_MISMATCH) {
+                throw e;
+            }
+            // Soft-fail empty/broken /txs and continue with UTXO fallback.
+            AppLog.warn("getActivity /txs soft-fail addr=" + address
+                    + " kind=" + e.getKind() + " status=" + e.getHttpStatus());
+        } catch (IOException e) {
+            AppLog.warn("getActivity /txs soft-fail addr=" + address + " msg=" + e.getMessage());
+        }
         List<TxInfo> fromUtxos = new ArrayList<>();
         for (Utxo u : getUtxos(address)) {
             if (u.txid == null || u.txid.isEmpty() || u.valueSat <= 0) continue;
@@ -318,13 +340,14 @@ public final class ApiClient {
                                     + " body=" + AppLog.truncate(hr.body, 300));
                         }
                         serverAttempts++;
-                        if (serverAttempts >= MAX_SERVER_ATTEMPTS) {
+                        int maxAttempts = broadcast ? MAX_BROADCAST_SERVER_ATTEMPTS
+                                : MAX_SERVER_ATTEMPTS;
+                        if (serverAttempts >= maxAttempts) {
                             lastClient = ApiException.fromHttpStatus(code, broadcast);
                             break; // try next base
                         }
                         // Broadcast upstream outages need a longer cool-down than GETs.
-                        sleepQuiet(broadcast ? Math.max(shortRetryBackoffMs, 1_500L)
-                                : shortRetryBackoffMs);
+                        sleepQuiet(broadcast ? broadcastRetryBackoffMs : shortRetryBackoffMs);
                         continue;
                     }
 
