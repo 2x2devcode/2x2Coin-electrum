@@ -66,6 +66,8 @@ public final class ApiClient {
     private long minRequestIntervalMs = DEFAULT_MIN_REQUEST_INTERVAL_MS;
     private final Object requestPaceLock = new Object();
     private long lastRequestAtMs = 0L;
+    /** Last HTTP {@code Date} from the API (unix ms); 0 if unknown. */
+    private volatile long lastServerTimeMs = 0L;
     /** Test hook: counts HTTP round-trips performed by this client. */
     final AtomicInteger requestCount = new AtomicInteger();
 
@@ -139,6 +141,8 @@ public final class ApiClient {
     public static final class Balance {
         public String address; public long confirmedSat; public boolean scanning;
         public long chainTip; public long indexedHeight;
+        /** Indexer source hint when present ({@code index}, {@code explorer}, …). */
+        public String source;
     }
 
     public static final class Utxo {
@@ -189,7 +193,36 @@ public final class ApiClient {
         b.scanning = optBool(o, "scanning", false);
         b.chainTip = optLong(o, "chainTip", 0);
         b.indexedHeight = optLong(o, "indexedHeight", -1);
+        b.source = optString(o, "source", null);
         return b;
+    }
+
+    /**
+     * Whether the UI should show an “indexer syncing” warning. The live API often
+     * leaves {@code scanning=true} on explorer fallback forever — that is not an
+     * active sync the user can wait out.
+     */
+    public static boolean shouldWarnIndexerSyncing(Balance b) {
+        if (b == null || !b.scanning) return false;
+        if (b.source != null && b.source.equalsIgnoreCase("explorer")) return false;
+        if (b.chainTip > 0 && b.indexedHeight >= 0) {
+            long lag = b.chainTip - b.indexedHeight;
+            // Huge permanent lag is an indexer quirk, not a short sync in progress.
+            if (lag > 5_000L) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Conservative “now” for tx {@code nTime}: earlier of local wall clock and the
+     * last API {@code Date} header (when known), so a fast PC clock does not produce
+     * {@code time-too-new} against the peer median.
+     */
+    public long networkNowSeconds() {
+        long local = System.currentTimeMillis() / 1000L;
+        long server = lastServerTimeMs / 1000L;
+        if (server <= 0L) return local;
+        return Math.min(local, server);
     }
 
     public List<Utxo> getUtxos(String address) throws IOException {
@@ -290,9 +323,24 @@ public final class ApiClient {
         JsonElement resEl = postJson("/api/tx/broadcast", body.toString(), true);
         JsonObject res = resEl.getAsJsonObject();
         BroadcastResult r = new BroadcastResult();
+        if (res.has("alreadyAccepted") && res.get("alreadyAccepted").getAsBoolean()) {
+            r.ok = true;
+            r.txid = firstStringOrNull(res, "txid", "txId", "result", "hash");
+            AppLog.info("broadcast already accepted by node txid=" + r.txid);
+            return r;
+        }
         if (res.has("error") && !res.get("error").isJsonNull()) {
-            AppLog.warn("broadcast JSON error field=" + AppLog.truncate(res.get("error").toString(), 400)
+            String err = res.get("error").toString();
+            AppLog.warn("broadcast JSON error field=" + AppLog.truncate(err, 400)
                     + " hexLen=" + (rawTxHex == null ? 0 : rawTxHex.length() / 2));
+            if (ApiException.isAlreadyAccepted(err)) {
+                r.ok = true;
+                AppLog.info("broadcast HTTP ok with already-accepted error field");
+                return r;
+            }
+            if (ApiException.isTimeTooNew(err)) {
+                throw new ApiException(ApiException.Kind.INVALID_TX, 200, ApiException.MSG_TIME_TOO_NEW);
+            }
             // Success HTTP with error field — treat as invalid tx, no raw JSON to UI.
             throw new ApiException(ApiException.Kind.INVALID_TX, 200, ApiException.MSG_INVALID_TX);
         }
@@ -335,6 +383,13 @@ public final class ApiClient {
                         if (broadcast) {
                             AppLog.warn("broadcast HTTP " + code + " base=" + base
                                     + " body=" + AppLog.truncate(hr.body, 500));
+                            if (code == 400 && ApiException.isAlreadyAccepted(hr.body)) {
+                                AppLog.info("broadcast already accepted (HTTP " + code + ")");
+                                return "{\"ok\":true,\"alreadyAccepted\":true}";
+                            }
+                            if (code == 400) {
+                                throw ApiException.fromBroadcastBody(code, hr.body);
+                            }
                         }
                         throw ApiException.fromHttpStatus(code, broadcast);
                     }
@@ -408,6 +463,9 @@ public final class ApiClient {
         }
 
         if (lastClient != null) throw lastClient;
+        if (broadcast) {
+            throw new ApiException(ApiException.Kind.NETWORK, 0, ApiException.MSG_BROADCAST);
+        }
         throw new ApiException(ApiException.Kind.NETWORK, 0, ApiException.MSG_NETWORK);
     }
 
@@ -472,10 +530,24 @@ public final class ApiClient {
         if (pinningEnabled && c instanceof HttpsURLConnection) {
             TlsPinning.verifyConnection((HttpsURLConnection) c, apiPins);
         }
+        noteServerDate(c.getHeaderField("Date"));
         InputStream is = code >= 200 && code < 400 ? c.getInputStream() : c.getErrorStream();
         String text = is == null ? "" : readAll(is);
         String retryAfter = c.getHeaderField("Retry-After");
         return new HttpResult(code, text, retryAfter);
+    }
+
+    private void noteServerDate(String dateHeader) {
+        if (dateHeader == null || dateHeader.isBlank()) return;
+        try {
+            long ms = java.time.ZonedDateTime
+                    .parse(dateHeader, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME)
+                    .toInstant()
+                    .toEpochMilli();
+            if (ms > 0L) lastServerTimeMs = ms;
+        } catch (Exception ignored) {
+            // Keep previous estimate.
+        }
     }
 
     private long retryAfterMs(String header) {

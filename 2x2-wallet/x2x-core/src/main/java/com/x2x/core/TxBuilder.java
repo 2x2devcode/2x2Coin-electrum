@@ -65,6 +65,17 @@ public final class TxBuilder {
      */
     public static Built build(List<Spendable> available, String toAddress, long amountSat,
                               long feePerKb, String changeAddress) {
+        return build(available, toAddress, amountSat, feePerKb, changeAddress,
+                System.currentTimeMillis() / 1000L, 0L);
+    }
+
+    /**
+     * @param nowSeconds   reference unix time (prefer min(local, API Date) to avoid time-too-new)
+     * @param extraLagSeconds additional seconds subtracted from {@code nowSeconds} for nTime
+     */
+    public static Built build(List<Spendable> available, String toAddress, long amountSat,
+                              long feePerKb, String changeAddress,
+                              long nowSeconds, long extraLagSeconds) {
         if (!Address.isValid(toAddress)) throw new IllegalArgumentException("invalid destination address");
         if (amountSat <= 0) throw new IllegalArgumentException("amount must be positive");
 
@@ -101,7 +112,7 @@ public final class TxBuilder {
 
         Transaction tx = new Transaction();
         // Set nTime immediately before signing (participates in sighash + mempool FutureDrift).
-        tx.nTime = Transaction.safeNTime(System.currentTimeMillis() / 1000L, minCoinNTime);
+        tx.nTime = Transaction.safeNTime(nowSeconds, minCoinNTime, extraLagSeconds);
         for (Spendable s : chosen) tx.addInput(s.txid, s.vout, s.scriptPubKey, s.valueSat);
         tx.addOutputToAddress(amountSat, toAddress);
         if (withChange) tx.addOutputToAddress(change, changeAddress);

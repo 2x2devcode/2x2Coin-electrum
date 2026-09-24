@@ -528,7 +528,9 @@ public class MainApp extends Application {
                 ApiClient.Balance depositBal = wallet.api().getBalance(depositAddr);
                 ApiClient.Balance b0 = recvIdx == 0 ? depositBal
                         : wallet.api().getBalance(wallet.receiveAddress(0));
-                final boolean scanningFinal = depositBal.scanning || b0.scanning;
+                final boolean scanningFinal =
+                        ApiClient.shouldWarnIndexerSyncing(depositBal)
+                                || ApiClient.shouldWarnIndexerSyncing(b0);
                 final long depositSat = depositBal.confirmedSat;
 
                 // Show deposit balance immediately so Activity/rate-limit failures cannot hide funds.
@@ -563,7 +565,8 @@ public class MainApp extends Application {
                             wallet.listActivity(recvIdx, changeIdx);
                     for (ApiClient.TxInfo t : net) {
                         if (t.txid == null) continue;
-                        storage.rememberTx(t.txid, "in", t.amount, null);
+                        // Do not force "in" — preserves outbound rows for the same txid (change out).
+                        storage.rememberTx(t.txid, t.direction, t.amount, null);
                     }
                     persistQuiet();
                     java.util.List<ApiClient.TxInfo> merged = mergeActivity(storage.getTxHistory(), net);

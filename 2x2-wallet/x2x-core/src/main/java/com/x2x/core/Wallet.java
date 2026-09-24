@@ -199,19 +199,23 @@ public final class Wallet {
      * Activity across known receive + change addresses. The deposit address alone goes empty
      * after the first spend (funds sit on change); {@code /txs} is often empty so we use
      * {@link ApiClient#getActivity(String)} (UTXO fallback) per address.
+     * Scans a small gap beyond the stored tips so recent change outputs still appear.
      */
     public List<ApiClient.TxInfo> listActivity(int highestReceiveIndex, int highestChangeIndex)
             throws IOException {
         List<ApiClient.TxInfo> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         IOException last = null;
+        int gap = 2;
         for (int c = 0; c < 2; c++) {
-            int n = Math.max(0, c == 0 ? highestReceiveIndex : highestChangeIndex) + 1;
+            int tip = Math.max(0, c == 0 ? highestReceiveIndex : highestChangeIndex);
+            int n = tip + 1 + gap;
             for (int i = 0; i < n; i++) {
                 try {
                     for (ApiClient.TxInfo t : api.getActivity(key(c, i).address)) {
                         String id = t.txid == null ? "" : t.txid;
                         if (id.isEmpty() || !seen.add(id)) continue;
+                        if (t.direction == null) t.direction = "in";
                         out.add(t);
                     }
                 } catch (ApiException e) {
@@ -234,21 +238,37 @@ public final class Wallet {
 
     public TxBuilder.Built createTransaction(String to, long amountSat, int changeIndex)
             throws IOException {
-        return createTransaction(to, amountSat, changeIndex, lookAhead - 1, changeIndex);
+        return createTransaction(to, amountSat, changeIndex, lookAhead - 1, changeIndex, 0L);
     }
 
     public TxBuilder.Built createTransaction(String to, long amountSat, int changeIndex,
                                              int highestReceiveIndex, int highestChangeIndex)
             throws IOException {
+        return createTransaction(to, amountSat, changeIndex,
+                highestReceiveIndex, highestChangeIndex, 0L);
+    }
+
+    public TxBuilder.Built createTransaction(String to, long amountSat, int changeIndex,
+                                             int highestReceiveIndex, int highestChangeIndex,
+                                             long extraLagSeconds)
+            throws IOException {
         int changeScan = Math.max(highestChangeIndex, changeIndex);
-        // Let the API rate-limit window cool down after a UI refresh storm.
-        sleepQuiet(1_500L);
+        // Let the API rate-limit window cool down after a UI refresh storm (skip on nTime retries).
+        if (extraLagSeconds <= 0L) sleepQuiet(1_500L);
         // Rough ceiling so we stop the UTXO scan once we have enough (avoids rate limits).
         long needSat = amountSat + Math.max(NetworkParameters.DEFAULT_FEE_PER_KB, 10_000L);
-        return TxBuilder.build(
-                collectSpendable(highestReceiveIndex, changeScan, needSat),
-                to, amountSat, api.getFeePerKb(),
-                changeAddress(changeIndex));
+        List<TxBuilder.Spendable> coins = collectSpendable(highestReceiveIndex, changeScan, needSat);
+        long fee = api.getFeePerKb();
+        long now = api.networkNowSeconds();
+        try {
+            return TxBuilder.build(coins, to, amountSat, fee, changeAddress(changeIndex),
+                    now, extraLagSeconds);
+        } catch (IllegalStateException e) {
+            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("insufficient")) {
+                throw new ApiException(ApiException.Kind.INVALID_REQUEST, 0, ApiException.MSG_INSUFFICIENT);
+            }
+            throw e;
+        }
     }
 
     public TxBuilder.Built createTransaction(String to, long amountSat) throws IOException {
@@ -265,15 +285,39 @@ public final class Wallet {
         AppLog.info("send start to=" + to + " amountSat=" + amountSat
                 + " changeIndex=" + changeIndex
                 + " recvTip=" + highestReceiveIndex + " changeTip=" + highestChangeIndex);
-        try {
-            TxBuilder.Built built = createTransaction(to, amountSat, changeIndex,
-                    highestReceiveIndex, highestChangeIndex);
-            return broadcastSigned(built);
-        } catch (IOException e) {
-            AppLog.error("send failed to=" + to + " amountSat=" + amountSat
-                    + " msg=" + ApiException.userMessage(e), e);
-            throw e;
+        long extraLag = 0L;
+        IOException last = null;
+        // Rebuild with progressively older nTime if peers reject time-too-new.
+        for (int attempt = 0; attempt < 4; attempt++) {
+            try {
+                TxBuilder.Built built = createTransaction(to, amountSat, changeIndex,
+                        highestReceiveIndex, highestChangeIndex, extraLag);
+                AppLog.info("send attempt=" + (attempt + 1)
+                        + " nTime=" + built.tx.nTime
+                        + " extraLag=" + extraLag
+                        + " netNow=" + api.networkNowSeconds());
+                return broadcastSigned(built);
+            } catch (ApiException e) {
+                last = e;
+                if (ApiException.isTimeTooNew(e) && attempt < 3) {
+                    extraLag += NetworkParameters.TX_TIME_RETRY_LAG_SECONDS;
+                    AppLog.warn("send time-too-new — rebuilding with extraLag=" + extraLag);
+                    sleepQuiet(500L);
+                    continue;
+                }
+                AppLog.error("send failed to=" + to + " amountSat=" + amountSat
+                        + " msg=" + ApiException.userMessage(e), e);
+                throw e;
+            } catch (IOException e) {
+                AppLog.error("send failed to=" + to + " amountSat=" + amountSat
+                        + " msg=" + ApiException.userMessage(e), e);
+                throw e;
+            }
         }
+        AppLog.error("send failed to=" + to + " amountSat=" + amountSat
+                + " msg=" + ApiException.userMessage(last), last);
+        throw last != null ? last
+                : new ApiException(ApiException.Kind.INVALID_TX, 0, ApiException.MSG_TIME_TOO_NEW);
     }
 
     /** Broadcast an already-built signed transaction (avoids a second UTXO scan). */
@@ -303,8 +347,11 @@ public final class Wallet {
             return txid;
         } catch (ApiException e) {
             // Gateway often returns 502 even when sendrawtransaction already accepted the tx.
-            if (e.getKind() == ApiException.Kind.NETWORK && inputsLookSpent(built)) {
-                AppLog.info("broadcast 502 but inputs spent — treating as success txid=" + built.txid());
+            if ((e.getKind() == ApiException.Kind.NETWORK
+                    || e.getKind() == ApiException.Kind.INVALID_TX)
+                    && !ApiException.isTimeTooNew(e)
+                    && inputsLookSpent(built)) {
+                AppLog.info("broadcast error but inputs spent — treating as success txid=" + built.txid());
                 return built.txid();
             }
             AppLog.error("broadcast failed txid=" + built.txid()

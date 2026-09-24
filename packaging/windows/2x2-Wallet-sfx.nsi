@@ -5,7 +5,7 @@
 ; Built by: compile-windows.sh  →  dist/windows/2x2-Wallet.exe
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.3.14"
+  !define APP_VERSION "1.3.15"
 !endif
 !ifndef PAYLOAD_DIR
   !define PAYLOAD_DIR "2x2-Wallet-windows"
