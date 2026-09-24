@@ -301,11 +301,44 @@ public final class Wallet {
             String txid = r.txid != null ? r.txid : built.txid();
             AppLog.info("broadcast success txid=" + txid);
             return txid;
-        } catch (IOException e) {
+        } catch (ApiException e) {
+            // Gateway often returns 502 even when sendrawtransaction already accepted the tx.
+            if (e.getKind() == ApiException.Kind.NETWORK && inputsLookSpent(built)) {
+                AppLog.info("broadcast 502 but inputs spent — treating as success txid=" + built.txid());
+                return built.txid();
+            }
             AppLog.error("broadcast failed txid=" + built.txid()
                     + " nTime=" + built.tx.nTime
                     + " msg=" + ApiException.userMessage(e), e);
             throw e;
+        } catch (IOException e) {
+            if (inputsLookSpent(built)) {
+                AppLog.info("broadcast transport error but inputs spent — success txid=" + built.txid());
+                return built.txid();
+            }
+            AppLog.error("broadcast failed txid=" + built.txid()
+                    + " nTime=" + built.tx.nTime
+                    + " msg=" + ApiException.userMessage(e), e);
+            throw e;
+        }
+    }
+
+    /** True if every prevout of {@code built} is no longer unspent (relay likely succeeded). */
+    boolean inputsLookSpent(TxBuilder.Built built) {
+        try {
+            // Brief pause so the index / UTXO set can reflect mempool acceptance.
+            sleepQuiet(1_200L);
+            for (Transaction.Input in : built.tx.inputs) {
+                String addr = Address.p2pkhFromScriptPubKey(in.connectedScript);
+                if (addr == null) return false;
+                if (!api.isOutPointSpent(addr, in.outPoint.txid, in.outPoint.index)) {
+                    return false;
+                }
+            }
+            return !built.tx.inputs.isEmpty();
+        } catch (Exception e) {
+            AppLog.warn("inputsLookSpent check failed: " + e.getMessage());
+            return false;
         }
     }
 

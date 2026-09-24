@@ -24,7 +24,7 @@ PACKAGING_DIR="${SCRIPT_DIR}/packaging/windows"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BUILD_LOG="${LOG_DIR}/compile-windows-${TIMESTAMP}.log"
 ERROR_LOG="${LOG_DIR}/compile-windows-error-${TIMESTAMP}.log"
-APP_VERSION="1.3.13"
+APP_VERSION="1.3.14"
 
 JRE_URL="https://download.bell-sw.com/java/17.0.13+12/bellsoft-jre17.0.13+12-windows-amd64-full.zip"
 JRE_ZIP_NAME="bellsoft-jre17.0.13+12-windows-amd64-full.zip"
