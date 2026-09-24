@@ -9,6 +9,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
@@ -36,7 +37,6 @@ import com.x2x.core.ApiException;
 import com.x2x.core.AppLog;
 import com.x2x.core.Bip39;
 import com.x2x.core.NetworkParameters;
-import com.x2x.core.TxBuilder;
 import com.x2x.core.Wallet;
 
 import java.util.ArrayList;
@@ -81,6 +81,9 @@ public class MainApp extends Application {
     private ImageView qrView;
     private TextField toField;
     private TextField amountField;
+    private Button sendButton;
+    private Button refreshButton;
+    private ComboBox<DesktopStorage.Contact> addressBookCombo;
 
     @Override
     public void start(Stage stage) {
@@ -305,8 +308,10 @@ public class MainApp extends Application {
         activityBox = new VBox(6);
         activityBox.getChildren().add(mutedLabel("Loading…"));
 
-        Button refresh = secondaryButton("Refresh");
-        refresh.setOnAction(e -> refresh());
+        refreshButton = compactSecondary("Refresh");
+        refreshButton.setOnAction(e -> refresh());
+        HBox refreshRow = new HBox(refreshButton);
+        refreshRow.setAlignment(Pos.CENTER);
 
         VBox bal = card(new VBox(6,
                 mutedLabel("WALLET BALANCE (all addresses)"),
@@ -316,7 +321,7 @@ public class MainApp extends Application {
 
         VBox box = new VBox(16,
                 row(titleLabel("2X2 Wallet"), statusLabel),
-                bal, act, refresh);
+                bal, act, refreshRow);
         box.setPadding(new Insets(20));
         return box;
     }
@@ -364,12 +369,84 @@ public class MainApp extends Application {
         amountField.setPromptText("Amount (2X2)");
         amountField.setStyle(fieldStyle());
         feeLabel = mutedLabel("Network fee applies");
-        Button send = primaryButton("Send 2X2");
-        send.setOnAction(e -> confirmSend());
-        VBox box = new VBox(16, sectionTitle("Send"),
-                card(new VBox(10, toField, amountField, feeLabel, send)));
+
+        addressBookCombo = new ComboBox<>();
+        addressBookCombo.setPromptText("Select saved address");
+        addressBookCombo.setMaxWidth(Double.MAX_VALUE);
+        addressBookCombo.setStyle(fieldStyle());
+        addressBookCombo.setOnAction(e -> {
+            DesktopStorage.Contact c = addressBookCombo.getValue();
+            if (c != null && c.address != null) toField.setText(c.address);
+        });
+        reloadAddressBookCombo();
+
+        TextField labelField = new TextField();
+        labelField.setPromptText("Label (optional)");
+        labelField.setStyle(fieldStyle());
+        Button saveContact = compactSecondary("Save to book");
+        saveContact.setOnAction(e -> {
+            String addr = toField.getText().trim();
+            if (!Address.isValid(addr)) {
+                alert(Alert.AlertType.ERROR, "Address book", "Enter a valid recipient address first.");
+                return;
+            }
+            try {
+                storage.addContact(labelField.getText(), addr);
+                persistQuiet();
+                reloadAddressBookCombo();
+                labelField.clear();
+                alert(Alert.AlertType.INFORMATION, "Address book", "Address saved.");
+            } catch (Exception ex) {
+                alert(Alert.AlertType.ERROR, "Address book", ex.getMessage());
+            }
+        });
+        Button removeContact = compactSecondary("Remove");
+        removeContact.setOnAction(e -> {
+            DesktopStorage.Contact c = addressBookCombo.getValue();
+            if (c == null || c.address == null) {
+                alert(Alert.AlertType.WARNING, "Address book", "Select a saved address to remove.");
+                return;
+            }
+            storage.removeContact(c.address);
+            persistQuiet();
+            reloadAddressBookCombo();
+        });
+        HBox bookActions = new HBox(10, saveContact, removeContact);
+        bookActions.setAlignment(Pos.CENTER_LEFT);
+
+        sendButton = compactPrimary("Send 2X2");
+        sendButton.setOnAction(e -> confirmSend());
+        HBox sendRow = new HBox(sendButton);
+        sendRow.setAlignment(Pos.CENTER);
+
+        VBox form = new VBox(10,
+                mutedLabel("Address book"),
+                addressBookCombo,
+                labelField,
+                bookActions,
+                mutedLabel("Recipient"),
+                toField,
+                mutedLabel("Amount"),
+                amountField,
+                feeLabel,
+                sendRow);
+        VBox box = new VBox(16, sectionTitle("Send"), card(form));
         box.setPadding(new Insets(20));
         return box;
+    }
+
+    private void reloadAddressBookCombo() {
+        if (addressBookCombo == null || storage == null) return;
+        DesktopStorage.Contact selected = addressBookCombo.getValue();
+        addressBookCombo.getItems().setAll(storage.getAddressBook());
+        if (selected != null) {
+            for (DesktopStorage.Contact c : addressBookCombo.getItems()) {
+                if (selected.address != null && selected.address.equalsIgnoreCase(c.address)) {
+                    addressBookCombo.setValue(c);
+                    break;
+                }
+            }
+        }
     }
 
     private VBox buildSettings() {
@@ -480,15 +557,25 @@ public class MainApp extends Application {
                 final long balFinal = bal;
                 Platform.runLater(() -> balanceLabel.setText(Amounts.satToCoins(balFinal)));
 
-                // Activity across receive + change (deposit alone goes empty after first spend).
+                // Activity: merge network (receive+change) with local history so spent txs remain.
                 try {
-                    java.util.List<ApiClient.TxInfo> items =
+                    java.util.List<ApiClient.TxInfo> net =
                             wallet.listActivity(recvIdx, changeIdx);
-                    if (items.size() > 12) items = items.subList(0, 12);
-                    final java.util.List<ApiClient.TxInfo> show = items;
+                    for (ApiClient.TxInfo t : net) {
+                        if (t.txid == null) continue;
+                        storage.rememberTx(t.txid, "in", t.amount, null);
+                    }
+                    persistQuiet();
+                    java.util.List<ApiClient.TxInfo> merged = mergeActivity(storage.getTxHistory(), net);
+                    if (merged.size() > 50) merged = merged.subList(0, 50);
+                    final java.util.List<ApiClient.TxInfo> show = merged;
                     Platform.runLater(() -> setActivityItems(show));
                 } catch (Exception actEx) {
-                    Platform.runLater(this::setActivityEmpty);
+                    java.util.List<ApiClient.TxInfo> localOnly = historyAsTxInfo(storage.getTxHistory());
+                    Platform.runLater(() -> {
+                        if (localOnly.isEmpty()) setActivityEmpty();
+                        else setActivityItems(localOnly);
+                    });
                 }
             } catch (Exception ex) {
                 Platform.runLater(this::setActivityEmpty);
@@ -513,7 +600,10 @@ public class MainApp extends Application {
             String shortId = id.length() > 18
                     ? id.substring(0, 10) + "…" + id.substring(id.length() - 6) : id;
             StringBuilder line = new StringBuilder(shortId);
-            if (t.amount != null) line.append("   +").append(t.amount).append(" 2X2");
+            if (t.amount != null) {
+                boolean out = t.direction != null && t.direction.equalsIgnoreCase("out");
+                line.append(out ? "   −" : "   +").append(t.amount).append(" 2X2");
+            }
             Label text = mutedLabel(line.toString());
             text.setWrapText(true);
             HBox.setHgrow(text, Priority.ALWAYS);
@@ -526,6 +616,46 @@ public class MainApp extends Application {
             rows.add(row);
         }
         activityBox.getChildren().setAll(rows);
+    }
+
+    private static List<ApiClient.TxInfo> historyAsTxInfo(List<DesktopStorage.HistoryEntry> hist) {
+        List<ApiClient.TxInfo> out = new ArrayList<>();
+        for (DesktopStorage.HistoryEntry e : hist) {
+            ApiClient.TxInfo t = new ApiClient.TxInfo();
+            t.txid = e.txid;
+            t.amount = e.amount;
+            t.direction = e.direction;
+            out.add(t);
+        }
+        return out;
+    }
+
+    private static List<ApiClient.TxInfo> mergeActivity(List<DesktopStorage.HistoryEntry> hist,
+                                                        List<ApiClient.TxInfo> net) {
+        java.util.LinkedHashMap<String, ApiClient.TxInfo> map = new java.util.LinkedHashMap<>();
+        for (DesktopStorage.HistoryEntry e : hist) {
+            if (e.txid == null) continue;
+            ApiClient.TxInfo t = new ApiClient.TxInfo();
+            t.txid = e.txid;
+            t.amount = e.amount;
+            t.direction = e.direction == null ? "in" : e.direction;
+            map.put(e.txid.toLowerCase(Locale.ROOT), t);
+        }
+        if (net != null) {
+            for (ApiClient.TxInfo t : net) {
+                if (t.txid == null) continue;
+                String key = t.txid.toLowerCase(Locale.ROOT);
+                ApiClient.TxInfo existing = map.get(key);
+                if (existing == null) {
+                    if (t.direction == null) t.direction = "in";
+                    map.put(key, t);
+                } else {
+                    if (existing.amount == null) existing.amount = t.amount;
+                    if (existing.direction == null) existing.direction = "in";
+                }
+            }
+        }
+        return new ArrayList<>(map.values());
     }
 
     private void confirmSend() {
@@ -546,6 +676,7 @@ public class MainApp extends Application {
             alert(Alert.AlertType.ERROR, "Invalid amount", "Amount must be positive.");
             return;
         }
+        setSending(true);
         final long amountFinal = amountSat;
         final int useChange = storage.getChangeIndex();
         final int recvIdx = storage.getReceiveIndex();
@@ -564,15 +695,18 @@ public class MainApp extends Application {
                     a.setHeaderText("Confirm payment");
                     Optional<ButtonType> res = a.showAndWait();
                     if (res.isEmpty() || res.get().getButtonData() != ButtonBar.ButtonData.OK_DONE) {
+                        setSending(false);
                         return;
                     }
-                    if (!requirePin("Authorize payment")) return;
-                    // Rebuild + sign immediately before broadcast so nTime uses a fresh
-                    // FutureDrift-safe timestamp (Protocol V2 allows only +15s skew).
+                    if (!requirePin("Authorize payment")) {
+                        setSending(false);
+                        return;
+                    }
                     doSend(to, amountFinal, useChange, recvIdx);
                 });
             } catch (Exception ex) {
                 Platform.runLater(() -> {
+                    setSending(false);
                     String msg = ApiException.isRateLimited(ex)
                             ? "Server is busy. Wait a few seconds, then try Send again."
                             : ApiException.userMessage(ex);
@@ -587,21 +721,43 @@ public class MainApp extends Application {
             try {
                 String txid = wallet.send(to, amountSat, useChange, recvIdx, useChange);
                 storage.setChangeIndex(useChange + 1);
+                storage.rememberTx(txid, "out", Amounts.satToCoins(amountSat), to);
                 persistQuiet();
                 Platform.runLater(() -> {
-                    alert(Alert.AlertType.INFORMATION, "Sent", "Transaction broadcast:\n" + txid);
+                    setSending(false);
                     toField.clear();
                     amountField.clear();
+                    alert(Alert.AlertType.INFORMATION, "Sent", "Transaction broadcast:\n" + txid);
                     refresh();
                 });
             } catch (Exception ex) {
-                Platform.runLater(() ->
-                        alert(Alert.AlertType.ERROR, "Send failed",
-                                ApiException.userMessage(ex)
-                                        + "\n\nDetails were saved to:\n"
-                                        + AppLog.logFileDisplayPath()));
+                Platform.runLater(() -> {
+                    setSending(false);
+                    toField.clear();
+                    amountField.clear();
+                    alert(Alert.AlertType.ERROR, "Send failed",
+                            ApiException.userMessage(ex)
+                                    + "\n\nDetails were saved to:\n"
+                                    + AppLog.logFileDisplayPath());
+                });
             }
         });
+    }
+
+    private void setSending(boolean busy) {
+        if (sendButton == null) return;
+        sendButton.setDisable(busy);
+        if (busy) {
+            sendButton.setText("Sending…");
+            sendButton.setStyle("-fx-background-color: #4A5568; -fx-text-fill: #CBD5E1; -fx-font-weight: bold;");
+        } else {
+            sendButton.setText("Send 2X2");
+            sendButton.setStyle("-fx-background-color: " + GREEN
+                    + "; -fx-text-fill: #041008; -fx-font-weight: bold;");
+        }
+        if (toField != null) toField.setDisable(busy);
+        if (amountField != null) amountField.setDisable(busy);
+        if (addressBookCombo != null) addressBookCombo.setDisable(busy);
     }
 
     private boolean requirePin(String reason) {
@@ -672,6 +828,24 @@ public class MainApp extends Application {
     private static Button secondaryButton(String t) {
         Button b = new Button(t);
         b.setMaxWidth(Double.MAX_VALUE);
+        b.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + ON + ";");
+        return b;
+    }
+
+    private static Button compactPrimary(String t) {
+        Button b = new Button(t);
+        b.setPrefWidth(148);
+        b.setMinWidth(148);
+        b.setMaxWidth(148);
+        b.setStyle("-fx-background-color: " + GREEN + "; -fx-text-fill: #041008; -fx-font-weight: bold;");
+        return b;
+    }
+
+    private static Button compactSecondary(String t) {
+        Button b = new Button(t);
+        b.setPrefWidth(132);
+        b.setMinWidth(120);
+        b.setMaxWidth(160);
         b.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + ON + ";");
         return b;
     }

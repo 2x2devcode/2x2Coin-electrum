@@ -50,4 +50,14 @@ public final class Address {
         s[24] = (byte) 0xac; // OP_CHECKSIG
         return s;
     }
+
+    /** P2PKH address from a standard scriptPubKey, or null if not P2PKH. */
+    public static String p2pkhFromScriptPubKey(byte[] script) {
+        if (script == null || script.length != 25) return null;
+        if ((script[0] & 0xff) != 0x76 || (script[1] & 0xff) != 0xa9 || (script[2] & 0xff) != 0x14
+                || (script[23] & 0xff) != 0x88 || (script[24] & 0xff) != 0xac) {
+            return null;
+        }
+        return fromHash160(Arrays.copyOfRange(script, 3, 23), NetworkParameters.P2PKH_VERSION);
+    }
 }

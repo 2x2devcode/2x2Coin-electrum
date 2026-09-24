@@ -235,6 +235,18 @@ public class ApiClientRetryTest {
     }
 
     @Test
+    public void isOutPointSpentWhenMissingFromUtxos() throws Exception {
+        String addr = "2aEv33T2jg7iczvGtoVvvX2ERz1ZJDk7m2";
+        server.createContext("/api/address/" + addr + "/utxos",
+                ex -> respond(ex, 200,
+                        "{\"utxos\":[{\"txid\":\"aa\",\"vout\":0,\"amountSatoshis\":100}]}"));
+        ApiClient api = client();
+        assertTrue(api.isOutPointSpent(addr, "bb", 0));
+        assertTrue(!api.isOutPointSpent(addr, "aa", 0));
+        assertTrue(api.isOutPointSpent(addr, "aa", 1));
+    }
+
+    @Test
     public void broadcastPostsRawTxField() throws Exception {
         final String[] seenBody = { null };
         server.createContext("/api/tx/broadcast", ex -> {

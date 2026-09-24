@@ -7,7 +7,9 @@ import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Properties;
 
 import javax.crypto.Cipher;
@@ -15,6 +17,11 @@ import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
+import com.x2x.core.Address;
 
 /**
  * Encrypted on-disk wallet storage for the desktop app ({@code ~/.2x2-wallet/wallet.dat}).
@@ -26,6 +33,8 @@ public final class DesktopStorage {
     private static final int SALT_LEN = 16;
     private static final int IV_LEN = 12;
     private static final int KEY_LEN_BITS = 256;
+    private static final int MAX_HISTORY = 200;
+    private static final Gson GSON = new GsonBuilder().create();
 
     private final Path dir;
     private final Path file;
@@ -36,6 +45,42 @@ public final class DesktopStorage {
     private int changeIndex;
     private byte[] pinSalt;
     private byte[] pinHash;
+    private final List<Contact> addressBook = new ArrayList<>();
+    private final List<HistoryEntry> txHistory = new ArrayList<>();
+
+    public static final class Contact {
+        public String label;
+        public String address;
+        public Contact() {}
+        public Contact(String label, String address) {
+            this.label = label;
+            this.address = address;
+        }
+        @Override public String toString() {
+            String l = label == null || label.isBlank() ? address : label;
+            return l + "  (" + shortAddr(address) + ")";
+        }
+        private static String shortAddr(String a) {
+            if (a == null || a.length() < 16) return a == null ? "" : a;
+            return a.substring(0, 8) + "…" + a.substring(a.length() - 6);
+        }
+    }
+
+    public static final class HistoryEntry {
+        public String txid;
+        public String direction; // in | out
+        public String amount;    // decimal coins
+        public String counterparty;
+        public long timeMs;
+        public HistoryEntry() {}
+        public HistoryEntry(String txid, String direction, String amount, String counterparty, long timeMs) {
+            this.txid = txid;
+            this.direction = direction;
+            this.amount = amount;
+            this.counterparty = counterparty;
+            this.timeMs = timeMs;
+        }
+    }
 
     public DesktopStorage() {
         this(Path.of(System.getProperty("user.home"), ".2x2-wallet"));
@@ -55,6 +100,8 @@ public final class DesktopStorage {
         this.passphrase = passphrase == null ? "" : passphrase;
         this.receiveIndex = 0;
         this.changeIndex = 0;
+        addressBook.clear();
+        txHistory.clear();
         setPin(pin);
         save(pin);
     }
@@ -77,6 +124,10 @@ public final class DesktopStorage {
         passphrase = data.getProperty("passphrase", "");
         receiveIndex = Integer.parseInt(data.getProperty("receiveIndex", "0"));
         changeIndex = Integer.parseInt(data.getProperty("changeIndex", "0"));
+        addressBook.clear();
+        addressBook.addAll(parseContacts(data.getProperty("addressBook", "[]")));
+        txHistory.clear();
+        txHistory.addAll(parseHistory(data.getProperty("txHistory", "[]")));
     }
 
     public void save(String pin) throws Exception {
@@ -88,6 +139,8 @@ public final class DesktopStorage {
         data.setProperty("passphrase", passphrase == null ? "" : passphrase);
         data.setProperty("receiveIndex", Integer.toString(receiveIndex));
         data.setProperty("changeIndex", Integer.toString(changeIndex));
+        data.setProperty("addressBook", GSON.toJson(addressBook));
+        data.setProperty("txHistory", GSON.toJson(txHistory));
         java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
         data.store(bos, "2x2-wallet");
         byte[] plain = bos.toByteArray();
@@ -114,6 +167,8 @@ public final class DesktopStorage {
         passphrase = "";
         receiveIndex = 0;
         changeIndex = 0;
+        addressBook.clear();
+        txHistory.clear();
         pinSalt = null;
         pinHash = null;
     }
@@ -126,6 +181,46 @@ public final class DesktopStorage {
     public void setReceiveIndex(int v) { receiveIndex = Math.max(0, v); }
     public void setChangeIndex(int v) { changeIndex = Math.max(0, v); }
 
+    public List<Contact> getAddressBook() { return new ArrayList<>(addressBook); }
+
+    public void addContact(String label, String address) {
+        if (!Address.isValid(address)) throw new IllegalArgumentException("invalid address");
+        String addr = address.trim();
+        String lab = label == null ? "" : label.trim();
+        for (Contact c : addressBook) {
+            if (addr.equalsIgnoreCase(c.address)) {
+                c.label = lab.isEmpty() ? c.label : lab;
+                return;
+            }
+        }
+        addressBook.add(new Contact(lab.isEmpty() ? shortLabel(addr) : lab, addr));
+    }
+
+    public void removeContact(String address) {
+        if (address == null) return;
+        addressBook.removeIf(c -> address.equalsIgnoreCase(c.address));
+    }
+
+    public List<HistoryEntry> getTxHistory() { return new ArrayList<>(txHistory); }
+
+    /** Upsert a wallet activity row (keeps sends after UTXOs are spent). */
+    public void rememberTx(String txid, String direction, String amountCoins, String counterparty) {
+        if (txid == null || txid.isEmpty()) return;
+        for (HistoryEntry e : txHistory) {
+            if (txid.equalsIgnoreCase(e.txid)) {
+                if (direction != null) e.direction = direction;
+                if (amountCoins != null) e.amount = amountCoins;
+                if (counterparty != null) e.counterparty = counterparty;
+                return;
+            }
+        }
+        txHistory.add(0, new HistoryEntry(txid, direction == null ? "in" : direction,
+                amountCoins, counterparty, System.currentTimeMillis()));
+        while (txHistory.size() > MAX_HISTORY) {
+            txHistory.remove(txHistory.size() - 1);
+        }
+    }
+
     public boolean verifyPin(String pin) {
         if (pinSalt == null || pinHash == null) return false;
         return MessageDigest.isEqual(pinHash, hashPin(pin, pinSalt));
@@ -137,6 +232,28 @@ public final class DesktopStorage {
         }
         pinSalt = random(SALT_LEN);
         pinHash = hashPin(pin, pinSalt);
+    }
+
+    private static List<Contact> parseContacts(String json) {
+        try {
+            List<Contact> list = GSON.fromJson(json, new TypeToken<List<Contact>>(){}.getType());
+            return list != null ? list : new ArrayList<>();
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private static List<HistoryEntry> parseHistory(String json) {
+        try {
+            List<HistoryEntry> list = GSON.fromJson(json, new TypeToken<List<HistoryEntry>>(){}.getType());
+            return list != null ? list : new ArrayList<>();
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private static String shortLabel(String addr) {
+        return addr.length() > 12 ? addr.substring(0, 6) + "…" + addr.substring(addr.length() - 4) : addr;
     }
 
     private static Properties readMeta(byte[] raw) throws IOException {
@@ -158,8 +275,7 @@ public final class DesktopStorage {
 
     private static byte[] deriveKey(String pin, byte[] salt) throws GeneralSecurityException {
         PBEKeySpec spec = new PBEKeySpec(pin.toCharArray(), salt, PBKDF2_ITERS, KEY_LEN_BITS);
-        byte[] key = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
-        return key;
+        return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
     }
 
     private static byte[] encrypt(byte[] key, byte[] iv, byte[] plain) throws GeneralSecurityException {

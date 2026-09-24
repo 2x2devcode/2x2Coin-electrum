@@ -77,7 +77,7 @@ cd 2x2-wallet
 
 ## Version
 
-App version: **1.3.13** (`versionCode` 14).
+App version: **1.3.14** (`versionCode` 15).
 
 If Windows self-contained `2x2-Wallet.exe` still shows **certificate pin mismatch** after updating,
 delete the folder `%LOCALAPPDATA%\2x2-Wallet` and run the new exe again (old runtimes were

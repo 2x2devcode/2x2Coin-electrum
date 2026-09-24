@@ -40,6 +40,16 @@ public class PrimitivesTest {
     }
 
     @Test
+    public void p2pkhFromScriptPubKeyRoundTrip() {
+        byte[] h160 = Hex.decode("0102030405060708090a0b0c0d0e0f1011121314");
+        String addr = Address.fromHash160(h160, NetworkParameters.P2PKH_VERSION);
+        byte[] spk = Address.p2pkhScript(addr);
+        assertEquals(addr, Address.p2pkhFromScriptPubKey(spk));
+        assertEquals(null, Address.p2pkhFromScriptPubKey(new byte[]{0x00}));
+        assertEquals(null, Address.p2pkhFromScriptPubKey(null));
+    }
+
+    @Test
     public void wifRoundTripCompressed() {
         byte[] priv = Hex.decode("1111111111111111111111111111111111111111111111111111111111111111");
         String wif = Wif.encode(priv, true);

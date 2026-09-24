@@ -154,6 +154,8 @@ public final class ApiClient {
 
     public static final class TxInfo {
         public String txid; public String amount; public long confirmations;
+        /** {@code in}, {@code out}, or null (treated as in). */
+        public String direction;
     }
 
     // ---- endpoints ----
@@ -256,12 +258,29 @@ public final class ApiClient {
     }
 
     /**
+     * True when {@code txid:vout} is no longer listed as unspent for {@code address}
+     * (used to detect a successful broadcast after a flaky 502 gateway response).
+     */
+    public boolean isOutPointSpent(String address, String txid, long vout) throws IOException {
+        if (address == null || txid == null) return false;
+        String want = txid.toLowerCase(java.util.Locale.ROOT);
+        for (Utxo u : getUtxos(address)) {
+            if (u.txid == null) continue;
+            if (u.txid.toLowerCase(java.util.Locale.ROOT).equals(want) && u.vout == vout) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * POST a signed raw transaction (hex encoding).
      *
      * <p>The live gateway must receive JSON field {@code rawTx}. Field {@code hex} is validated
      * by a Bitcoin-style decoder that does not understand Peercoin {@code nTime}, so valid 2x2
      * transactions are rejected as {@code invalid transaction}. Garbage {@code rawTx} yields
-     * HTTP 502 from the upstream node (mapped to a broadcast/network error).
+     * HTTP 502 from the upstream node (mapped to a broadcast/network error). Intermittent 502s
+     * may still mean the node accepted the tx — callers should verify spent inputs.
      */
     public BroadcastResult broadcast(String rawTxHex) throws IOException {
         JsonObject body = new JsonObject();
