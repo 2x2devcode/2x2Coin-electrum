@@ -61,6 +61,26 @@ public class ApiClientRetryTest {
     }
 
     @Test
+    public void indexerSyncWarningIgnoresExplorerFallback() {
+        ApiClient.Balance b = new ApiClient.Balance();
+        b.scanning = true;
+        b.source = "explorer";
+        b.chainTip = 100;
+        b.indexedHeight = 50;
+        assertTrue(!ApiClient.shouldWarnIndexerSyncing(b));
+
+        b.source = "index";
+        assertTrue(ApiClient.shouldWarnIndexerSyncing(b));
+
+        b.indexedHeight = 0;
+        b.chainTip = 200_000;
+        assertTrue(!ApiClient.shouldWarnIndexerSyncing(b));
+
+        b.scanning = false;
+        assertTrue(!ApiClient.shouldWarnIndexerSyncing(b));
+    }
+
+    @Test
     public void broadcast400DoesNotRetry() throws Exception {
         server.createContext("/api/tx/broadcast", ex -> {
             hits.incrementAndGet();
@@ -216,6 +236,36 @@ public class ApiClientRetryTest {
         assertEquals(1, act.size());
         assertEquals("874218e55315afd7951f743accd0e5a948e3d1af483eaf41a18c1f0e2c37082e", act.get(0).txid);
         assertEquals("10.00000000", act.get(0).amount);
+    }
+
+    @Test
+    public void broadcast400TimeTooNewMapsMessage() throws Exception {
+        server.createContext("/api/tx/broadcast", ex -> {
+            hits.incrementAndGet();
+            respond(ex, 400,
+                    "{\"error\":\"error code: -26 error message: 64: time-too-new\"}");
+        });
+        try {
+            client().broadcast("00");
+            fail("expected ApiException");
+        } catch (ApiException e) {
+            assertEquals(ApiException.Kind.INVALID_TX, e.getKind());
+            assertEquals(ApiException.MSG_TIME_TOO_NEW, e.getUserMessage());
+            assertTrue(ApiException.isTimeTooNew(e));
+        }
+        assertEquals(1, hits.get());
+    }
+
+    @Test
+    public void broadcastAlreadyInChainTreatedAsSuccess() throws Exception {
+        server.createContext("/api/tx/broadcast", ex -> {
+            hits.incrementAndGet();
+            respond(ex, 400,
+                    "{\"error\":\"error code: -27 error message: transaction already in block chain\"}");
+        });
+        ApiClient.BroadcastResult r = client().broadcast("deadbeef");
+        assertTrue(r.ok);
+        assertEquals(1, hits.get());
     }
 
     @Test

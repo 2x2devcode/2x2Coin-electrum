@@ -61,9 +61,11 @@ public class LiveApiTest {
         } catch (ApiException e) {
             System.out.println("[live] broadcast(garbage): kind=" + e.getKind()
                     + " status=" + e.getHttpStatus() + " msg=" + e.getUserMessage());
-            // Field "rawTx" is forwarded to the daemon; garbage yields HTTP 502 upstream.
-            assertEquals(ApiException.Kind.NETWORK, e.getKind());
-            assertEquals(502, e.getHttpStatus());
+            // Field "rawTx" is forwarded to the daemon; garbage yields HTTP 400 decode failed
+            // (or intermittent 502 when the upstream gateway is down).
+            assertTrue(e.getKind() == ApiException.Kind.INVALID_TX
+                    || e.getKind() == ApiException.Kind.NETWORK);
+            assertTrue(e.getHttpStatus() == 400 || e.getHttpStatus() == 502);
             assertTrue(!e.getUserMessage().contains("{"));
         }
     }

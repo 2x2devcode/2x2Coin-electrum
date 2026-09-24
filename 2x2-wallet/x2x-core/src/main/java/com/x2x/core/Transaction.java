@@ -29,16 +29,23 @@ public final class Transaction {
     }
 
     /**
-     * Mempool-safe transaction timestamp: wall clock minus
-     * {@link NetworkParameters#TX_TIME_SAFETY_LAG_SECONDS}, floored at
-     * {@code minInputNTime} so we never violate {@code bad-txns-time-earlier-than-input}.
+     * Mempool-safe transaction timestamp: reference clock minus
+     * {@link NetworkParameters#TX_TIME_SAFETY_LAG_SECONDS} (and optional extra lag),
+     * floored at {@code minInputNTime} so we never violate
+     * {@code bad-txns-time-earlier-than-input}.
      */
     public static long safeNTime() {
-        return safeNTime(System.currentTimeMillis() / 1000L, 0L);
+        return safeNTime(System.currentTimeMillis() / 1000L, 0L, 0L);
     }
 
     public static long safeNTime(long nowSeconds, long minInputNTime) {
-        long n = nowSeconds - NetworkParameters.TX_TIME_SAFETY_LAG_SECONDS;
+        return safeNTime(nowSeconds, minInputNTime, 0L);
+    }
+
+    public static long safeNTime(long nowSeconds, long minInputNTime, long extraLagSeconds) {
+        long lag = NetworkParameters.TX_TIME_SAFETY_LAG_SECONDS
+                + Math.max(0L, extraLagSeconds);
+        long n = nowSeconds - lag;
         if (n < minInputNTime) n = minInputNTime;
         return Math.max(0L, n);
     }

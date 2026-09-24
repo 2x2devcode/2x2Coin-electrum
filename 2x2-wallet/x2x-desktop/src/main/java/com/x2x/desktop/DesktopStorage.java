@@ -208,8 +208,20 @@ public final class DesktopStorage {
         if (txid == null || txid.isEmpty()) return;
         for (HistoryEntry e : txHistory) {
             if (txid.equalsIgnoreCase(e.txid)) {
-                if (direction != null) e.direction = direction;
-                if (amountCoins != null) e.amount = amountCoins;
+                // Never downgrade an outbound send to "in" when a change UTXO reappears.
+                if (direction != null) {
+                    boolean haveOut = e.direction != null && e.direction.equalsIgnoreCase("out");
+                    boolean newIn = direction.equalsIgnoreCase("in");
+                    if (!(haveOut && newIn)) {
+                        e.direction = direction;
+                    }
+                }
+                if (amountCoins != null && (e.amount == null || e.amount.isEmpty()
+                        || (direction != null && direction.equalsIgnoreCase("out")))) {
+                    e.amount = amountCoins;
+                } else if (amountCoins != null && e.amount == null) {
+                    e.amount = amountCoins;
+                }
                 if (counterparty != null) e.counterparty = counterparty;
                 return;
             }

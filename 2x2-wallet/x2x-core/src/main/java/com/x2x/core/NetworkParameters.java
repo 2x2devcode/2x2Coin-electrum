@@ -59,11 +59,15 @@ public final class NetworkParameters {
     /**
      * Seconds to subtract from wall-clock when setting tx {@code nTime}.
      * Protocol V2 mempool policy only allows {@code GetAdjustedTime() + 15}
-     * ({@code FutureDrift}); a slightly-fast client clock otherwise yields
-     * {@code time-too-new} → API "invalid transaction". Past timestamps are fine
-     * as long as {@code nTime >=} each spent coin's {@code nTime}.
+     * ({@code FutureDrift}); a client or API clock ahead of the peer median
+     * otherwise yields {@code time-too-new} → API "invalid transaction".
+     * Past timestamps are fine as long as {@code nTime >=} each spent coin's {@code nTime}.
+     * Keep this comfortably larger than typical PC/NTP skew vs. small peer sets.
      */
-    public static final long TX_TIME_SAFETY_LAG_SECONDS = 120L;
+    public static final long TX_TIME_SAFETY_LAG_SECONDS = 600L;
+
+    /** Extra lag added on each automatic rebuild after a {@code time-too-new} reject. */
+    public static final long TX_TIME_RETRY_LAG_SECONDS = 600L;
 
     // ---- Fees ----
     public static final long DEFAULT_FEE_PER_KB = 10_000L; // sat/kB (overridden by /api/fee)

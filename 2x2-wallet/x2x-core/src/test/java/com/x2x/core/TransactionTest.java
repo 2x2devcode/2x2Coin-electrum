@@ -82,10 +82,23 @@ public class TransactionTest {
         long coinTime = now - 30; // input younger than the default lag
         assertEquals(coinTime, Transaction.safeNTime(now, coinTime));
 
+        long extra = Transaction.safeNTime(now, 0L, 300L);
+        assertEquals(now - NetworkParameters.TX_TIME_SAFETY_LAG_SECONDS - 300L, extra);
+
         Transaction fresh = new Transaction();
         long wall = System.currentTimeMillis() / 1000L;
         assertTrue("default nTime must not be in the future", fresh.nTime <= wall);
         assertTrue("default nTime applies safety lag",
                 fresh.nTime <= wall - NetworkParameters.TX_TIME_SAFETY_LAG_SECONDS + 1);
+    }
+
+    @Test
+    public void userMessageMapsInsufficientFunds() {
+        assertEquals(ApiException.MSG_INSUFFICIENT,
+                ApiException.userMessage(new IllegalStateException("insufficient funds")));
+        assertEquals(ApiException.MSG_TIME_TOO_NEW,
+                ApiException.fromBroadcastBody(400,
+                        "{\"error\":\"error code: -26 error message: 64: time-too-new\"}")
+                        .getUserMessage());
     }
 }

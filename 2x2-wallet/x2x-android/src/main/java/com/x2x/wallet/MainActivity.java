@@ -188,7 +188,7 @@ public class MainActivity extends AppCompatActivity {
                 if (deposit.confirmedSat > 0) bal = deposit.confirmedSat;
                 else throw e;
             }
-            return new Object[] { bal, deposit.scanning };
+            return new Object[] { bal, ApiClient.shouldWarnIndexerSyncing(deposit) };
         }, pack -> {
             long bal = (Long) pack[0];
             boolean scanning = (Boolean) pack[1];
